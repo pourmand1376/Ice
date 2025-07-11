@@ -60,7 +60,7 @@ final class IceBarColorManager: ObservableObject {
                 .store(in: &c)
 
             iceBarPanel.publisher(for: \.frame)
-                .receive(on: DispatchQueue.main)
+                .throttle(for: 0.1, scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self, weak iceBarPanel] frame in
                     guard
                         let self,
@@ -118,31 +118,24 @@ final class IceBarColorManager: ObservableObject {
         let windows = WindowInfo.getWindows(option: .onScreen)
         let displayID = screen.displayID
 
-        if #available(macOS 26.0, *) {
-            if
-                let menuBarWindow = WindowInfo.getMenuBarWindow(from: windows, for: displayID),
-                let wallpaperWindow = WindowInfo.getWallpaperWindow(from: windows, for: displayID)
-            {
-                let bounds = with(wallpaperWindow.bounds) { $0.size.height = 1 }
-                let windowIDs = [menuBarWindow.windowID, wallpaperWindow.windowID]
-                if let image = ScreenCapture.captureWindows(windowIDs, screenBounds: bounds, option: .nominalResolution) {
-                    // Just use `menuBarWindow` as the source for now, regardless
-                    // of whether it contributes to the capture.
-                    windowImageInfo = WindowImageInfo(image: image, source: .menuBarWindow)
-                } else {
-                    windowImageInfo = nil
-                }
-            }
-        } else {
-            if
-                let window = WindowInfo.getMenuBarWindow(from: windows, for: displayID),
-                let image = ScreenCapture.captureWindow(window.windowID, option: .nominalResolution)
-            {
-                windowImageInfo = WindowImageInfo(image: image, source: .menuBarWindow)
-            } else {
-                windowImageInfo = nil
-            }
+        guard
+            let menuBarWindow = WindowInfo.getMenuBarWindow(from: windows, for: displayID),
+            let wallpaperWindow = WindowInfo.getWallpaperWindow(from: windows, for: displayID)
+        else {
+            return
         }
+
+        let windowIDs = [menuBarWindow.windowID, wallpaperWindow.windowID]
+        let bounds = with(wallpaperWindow.bounds) { $0.size.height = 1 }
+        let option: CGWindowImageOption = .nominalResolution
+
+        guard let image = ScreenCapture.captureWindows(windowIDs, screenBounds: bounds, option: option) else {
+            return
+        }
+
+        // Just use `menuBarWindow` as the source for now, regardless
+        // of whether it contributes to the capture.
+        windowImageInfo = WindowImageInfo(image: image, source: .menuBarWindow)
     }
 
     private func updateColorInfo(with frame: CGRect, screen: NSScreen) {
