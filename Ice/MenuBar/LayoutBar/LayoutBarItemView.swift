@@ -32,17 +32,10 @@ final class LayoutBarItemView: NSView {
     var hasContainer = false
 
     /// The image displayed inside the view.
-    private var image: NSImage? {
+    private var cachedImage: MenuBarItemImageCache.CapturedImage? {
         didSet {
-            if
-                let image,
-                let screen = appState?.imageCache.screen
-            {
-                let size = CGSize(
-                    width: image.size.width / screen.backingScaleFactor,
-                    height: image.size.height / screen.backingScaleFactor
-                )
-                setFrameSize(size)
+            if let image = cachedImage {
+                setFrameSize(image.scaledSize)
             } else {
                 setFrameSize(.zero)
             }
@@ -92,13 +85,10 @@ final class LayoutBarItemView: NSView {
         if let appState {
             appState.imageCache.$images
                 .sink { [weak self] images in
-                    guard
-                        let self,
-                        let cgImage = images[item.info]
-                    else {
+                    guard let self, let cachedImage = images[item.info] else {
                         return
                     }
-                    image = NSImage(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
+                    self.cachedImage = cachedImage
                 }
                 .store(in: &c)
         }
@@ -123,7 +113,7 @@ final class LayoutBarItemView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         if !isDraggingPlaceholder {
-            image?.draw(
+            cachedImage?.nsImage.draw(
                 in: bounds,
                 from: .zero,
                 operation: .sourceOver,
@@ -169,7 +159,7 @@ final class LayoutBarItemView: NSView {
         pasteboardItem.setData(Data(), forType: .layoutBarItem)
 
         let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
-        draggingItem.setDraggingFrame(bounds, contents: image)
+        draggingItem.setDraggingFrame(bounds, contents: cachedImage?.nsImage)
 
         beginDraggingSession(with: [draggingItem], event: event, source: self)
     }

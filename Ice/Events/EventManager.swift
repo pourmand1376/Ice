@@ -186,7 +186,7 @@ extension EventManager {
                 return
             }
 
-            await targetSection.toggle()
+            targetSection.toggle()
         }
     }
 
@@ -340,7 +340,7 @@ extension EventManager {
 
         if appState.settings.advanced.showAllSectionsOnUserDrag {
             for section in appState.menuBarManager.sections {
-                section.controlItem.state = .showItems
+                section.controlItem.state = .showSection
             }
         }
     }
@@ -373,7 +373,7 @@ extension EventManager {
                 guard isMouseInsideEmptyMenuBarSpace(appState: appState, screen: screen) else {
                     return
                 }
-                await hiddenSection.show()
+                hiddenSection.show()
             }
         } else {
             guard
@@ -416,12 +416,10 @@ extension EventManager {
 
         let averageDelta = (event.scrollingDeltaX + event.scrollingDeltaY) / 2
 
-        Task {
-            if averageDelta > 5 {
-                await hiddenSection.show()
-            } else if averageDelta < -5 {
-                hiddenSection.hide()
-            }
+        if averageDelta > 5 {
+            hiddenSection.show()
+        } else if averageDelta < -5 {
+            hiddenSection.hide()
         }
     }
 }

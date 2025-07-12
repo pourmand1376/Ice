@@ -178,7 +178,7 @@ final class MenuBarManager: ObservableObject {
                     return
                 }
 
-                if sections.contains(where: { $0.controlItem.state == .showItems }) {
+                if sections.contains(where: { $0.controlItem.state == .showSection }) {
                     guard let screen = NSScreen.main else {
                         return
                     }
@@ -198,7 +198,7 @@ final class MenuBarManager: ObservableObject {
                         let alwaysHiddenSection = section(withName: .alwaysHidden),
                         alwaysHiddenSection.isEnabled
                     {
-                        if alwaysHiddenSection.controlItem.state == .hideItems {
+                        if alwaysHiddenSection.controlItem.state == .hideSection {
                             if let alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map({ items.remove(at: $0) }) {
                                 items.trimPrefix { $0.bounds.maxX <= alwaysHiddenControlItem.bounds.minX }
                             }

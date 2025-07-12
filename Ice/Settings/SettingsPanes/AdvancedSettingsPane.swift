@@ -143,7 +143,7 @@ struct AdvancedSettingsPane: View {
 
     @ViewBuilder
     private var allPermissions: some View {
-        ForEach(appState.permissionsManager.allPermissions) { permission in
+        ForEach(appState.permissions.allPermissions) { permission in
             IceLabeledContent {
                 if permission.hasPermission {
                     Label {

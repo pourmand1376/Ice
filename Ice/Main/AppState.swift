@@ -19,6 +19,9 @@ final class AppState: ObservableObject {
     /// Model for the app's settings.
     let settings = AppSettings()
 
+    /// Model for the app's permissions.
+    let permissions = AppPermissions()
+
     /// Model for app-wide navigation.
     let navigationState = AppNavigationState()
 
@@ -40,9 +43,6 @@ final class AppState: ObservableObject {
     /// Manager for events received by the app.
     let eventManager = EventManager()
 
-    /// Manager for app permissions.
-    let permissionsManager = PermissionsManager()
-
     /// Manager for app updates.
     let updatesManager = UpdatesManager()
 
@@ -59,7 +59,7 @@ final class AppState: ObservableObject {
     private lazy var setupActions: () = {
         logger.info("Running setup actions")
         configureCancellables()
-        permissionsManager.stopAllChecks()
+        permissions.stopAllChecks()
         menuBarManager.performSetup(with: self)
         appearanceManager.performSetup(with: self)
         eventManager.performSetup(with: self)
@@ -142,10 +142,8 @@ final class AppState: ObservableObject {
             guard let self, shouldUpdate else {
                 return
             }
-            Task.detached {
-                if ScreenCapture.cachedCheckPermissions(reset: true) {
-                    await self.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
-                }
+            Task {
+                await self.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
             }
         }
         .store(in: &c)
@@ -155,7 +153,7 @@ final class AppState: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &c)
-        permissionsManager.objectWillChange
+        permissions.objectWillChange
             .sink { [weak self] in
                 self?.objectWillChange.send()
             }
@@ -172,6 +170,15 @@ final class AppState: ObservableObject {
             .store(in: &c)
 
         cancellables = c
+    }
+
+    func hasPermission(_ key: AppPermissions.PermissionKey) -> Bool {
+        switch key {
+        case .accessibility:
+            permissions.accessibility.hasPermission
+        case .screenRecording:
+            permissions.screenRecording.hasPermission
+        }
     }
 
     /// Returns a publisher for the window with the given identifier.

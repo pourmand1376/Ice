@@ -95,7 +95,7 @@ final class MenuBarSearchPanel: NSPanel {
     }
 
     /// Shows the search panel on the given screen.
-    func show(on screen: NSScreen) async {
+    func show(on screen: NSScreen) {
         guard let appState else {
             return
         }
@@ -103,35 +103,35 @@ final class MenuBarSearchPanel: NSPanel {
         // Important that we set the navigation state before updating the cache.
         appState.navigationState.isSearchPresented = true
 
-        if ScreenCapture.cachedCheckPermissions() {
+        Task {
             await appState.imageCache.updateCache()
+
+            let hostingView = MenuBarSearchHostingView(appState: appState, displayID: screen.displayID, panel: self)
+            hostingView.setFrameSize(hostingView.intrinsicContentSize)
+            setFrame(hostingView.frame, display: true)
+
+            contentView = hostingView
+
+            // Calculate the top left position.
+            let topLeft = CGPoint(
+                x: screen.frame.midX - frame.width / 2,
+                y: screen.frame.midY + (frame.height / 2) + (screen.frame.height / 8)
+            )
+
+            cascadeTopLeft(from: topLeft)
+            makeKeyAndOrderFront(nil)
+
+            mouseDownMonitor.start()
+            keyDownMonitor.start()
         }
-
-        let hostingView = MenuBarSearchHostingView(appState: appState, displayID: screen.displayID, panel: self)
-        hostingView.setFrameSize(hostingView.intrinsicContentSize)
-        setFrame(hostingView.frame, display: true)
-
-        contentView = hostingView
-
-        // Calculate the top left position.
-        let topLeft = CGPoint(
-            x: screen.frame.midX - frame.width / 2,
-            y: screen.frame.midY + (frame.height / 2) + (screen.frame.height / 8)
-        )
-
-        cascadeTopLeft(from: topLeft)
-        makeKeyAndOrderFront(nil)
-
-        mouseDownMonitor.start()
-        keyDownMonitor.start()
     }
 
     /// Toggles the panel's visibility.
-    func toggle() async {
+    func toggle() {
         if isVisible {
             close()
         } else if let screen = MenuBarSearchPanel.defaultScreen {
-            await show(on: screen)
+            show(on: screen)
         }
     }
 
@@ -456,24 +456,32 @@ private struct MenuBarSearchItemView: View {
 
     private var image: NSImage {
         guard
-            let image = imageCache.images[item.info]?.trimmingTransparentPixels(around: [.minXEdge, .maxXEdge]),
-            let screen = imageCache.screen
+            let cachedImage = imageCache.images[item.info],
+            let trimmedImage = cachedImage.cgImage.trimmingTransparentPixels(around: [.minXEdge, .maxXEdge])
         else {
             return NSImage()
         }
         let size = CGSize(
-            width: CGFloat(image.width) / screen.backingScaleFactor,
-            height: CGFloat(image.height) / screen.backingScaleFactor
+            width: CGFloat(trimmedImage.width) / cachedImage.scale,
+            height: CGFloat(trimmedImage.height) / cachedImage.scale
         )
-        return NSImage(cgImage: image, size: size)
+        return NSImage(cgImage: trimmedImage, size: size)
     }
 
     private var appIcon: NSImage {
-        if item.legacyInfo.namespace == .systemUIServer {
-            controlCenterIcon ?? NSImage()
-        } else {
-            item.owningApplication?.icon ?? NSImage()
+        if
+            item.info.namespace == .systemUIServer,
+            let icon = controlCenterIcon
+        {
+            return icon
         }
+        if let icon = item.sourceApplication?.icon {
+            return icon
+        }
+        if let icon = item.owningApplication?.icon {
+            return icon
+        }
+        return NSImage()
     }
 
     private var backgroundShape: some InsettableShape {

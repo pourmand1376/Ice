@@ -38,15 +38,13 @@ final class MenuBarItemManager: ObservableObject {
         func managedItems(for section: MenuBarSection.Name) -> [MenuBarItem] {
             self[section].filter { item in
                 // Filter out items that can't be hidden.
-                guard item.canBeHidden else {
+                if !item.canBeHidden {
                     return false
                 }
 
-                if item.owningApplication == .current {
-                    // Ice icon is the only item owned by Ice that should be included.
-                    guard item.title == ControlItem.Identifier.iceIcon.rawValue else {
-                        return false
-                    }
+                // Filter out the two separator control items.
+                if item.isControlItem && item.info != .visibleControlItem {
+                    return false
                 }
 
                 return true
@@ -222,7 +220,7 @@ extension MenuBarItemManager {
         for (item, destination) in tempShownItems {
             switch destination {
             case .leftOfItem(let targetItem):
-                switch targetItem.legacyInfo {
+                switch targetItem.info {
                 case .hiddenControlItem:
                     cache[.hidden].append(item)
                 case .alwaysHiddenControlItem:
@@ -238,7 +236,7 @@ extension MenuBarItemManager {
                     cache[section].insert(item, at: index.clamped(to: range))
                 }
             case .rightOfItem(let targetItem):
-                switch targetItem.legacyInfo {
+                switch targetItem.info {
                 case .hiddenControlItem:
                     cache[.visible].insert(item, at: 0)
                 case .alwaysHiddenControlItem:
@@ -411,7 +409,11 @@ extension MenuBarItemManager {
     /// - Parameters:
     ///   - timeout: Amount of time to wait before throwing an error.
     ///   - operation: The operation to perform.
-    private func waitWithTask(timeout: Duration?, operation: @escaping @Sendable () async throws -> Void) async throws {
+    private func waitWithTask(
+        timeout: Duration?,
+        @_inheritActorContext @_implicitSelfCapture
+        operation: sending @escaping @isolated(any) () async throws -> Void
+    ) async throws {
         let task = if let timeout {
             Task(timeout: timeout, operation: operation)
         } else {
@@ -857,13 +859,10 @@ extension MenuBarItemManager {
     private func waitForBoundsChange(of item: MenuBarItem, initialBounds: CGRect, timeout: Duration) async throws {
         struct BoundsCheckCancellationError: Error { }
 
-        let boundsCheckTask = Task(timeout: timeout) { [weak self] in
+        let boundsCheckTask = Task(timeout: timeout) {
             while true {
                 try Task.checkCancellation()
-                guard
-                    let self,
-                    let currentBounds = await getCurrentBounds(for: item)
-                else {
+                guard let currentBounds = getCurrentBounds(for: item) else {
                     throw BoundsCheckCancellationError()
                 }
                 if currentBounds != initialBounds {
@@ -1174,7 +1173,7 @@ extension MenuBarItemManager {
         let waitTask = Task(timeout: timeout) {
             while true {
                 try Task.checkCancellation()
-                if try await self.itemHasCorrectPosition(item: item, for: destination) {
+                if try itemHasCorrectPosition(item: item, for: destination) {
                     return
                 }
             }
@@ -1394,7 +1393,7 @@ extension MenuBarItemManager {
         }
 
         // Remove all items up to the hidden control item.
-        items.trimPrefix { $0.legacyInfo != .hiddenControlItem }
+        items.trimPrefix { $0.info != .hiddenControlItem }
         // Remove the hidden control item.
         items.removeFirst()
 
