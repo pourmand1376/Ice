@@ -174,7 +174,7 @@ final class IceBarPanel: NSPanel {
             managedItems = appState.itemManager.itemCache.managedItems(for: section)
         }
 
-        if managedItems.contains(where: { appState.imageCache.images[$0.info] == nil }) {
+        if managedItems.contains(where: { appState.imageCache.images[$0.tag] == nil }) {
             await appState.imageCache.updateCache()
         }
 
@@ -420,7 +420,7 @@ private struct IceBarItemView: View {
     }
 
     private var image: NSImage? {
-        guard let cachedImage = imageCache.images[item.info] else {
+        guard let cachedImage = imageCache.images[item.tag] else {
             return nil
         }
         return cachedImage.nsImage

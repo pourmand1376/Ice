@@ -1,37 +1,39 @@
 //
-//  MenuBarItemInfo.swift
+//  MenuBarItemTag.swift
 //  Ice
 //
 
 import CoreGraphics
 
-// MARK: - MenuBarItemInfo
+// MARK: - MenuBarItemTag
 
-/// A simplified version of a menu bar item.
-struct MenuBarItemInfo: Hashable, CustomStringConvertible {
-    /// The namespace of the info's item.
+/// An identifier for a menu bar item.
+struct MenuBarItemTag: Hashable, CustomStringConvertible {
+    /// The namespace of the item identified by this tag.
     let namespace: Namespace
 
-    /// The title of the info's item.
+    /// The title of the item identified by this tag.
     let title: String
 
-    /// A Boolean value that indicates whether the info's item can be moved.
+    /// A Boolean value that indicates whether the item identified
+    /// by this tag can be moved.
     var isMovable: Bool {
-        !MenuBarItemInfo.immovableItems.contains(self)
+        !MenuBarItemTag.immovableItems.contains(self)
     }
 
-    /// A Boolean value that indicates whether the info's item can be hidden.
+    /// A Boolean value that indicates whether the item identified
+    /// by this tag can be hidden.
     var canBeHidden: Bool {
-        !MenuBarItemInfo.nonHideableItems.contains(self)
+        !MenuBarItemTag.nonHideableItems.contains(self)
     }
 
-    /// A Boolean value that indicates whether the info's item is one of Ice's
-    /// control items.
+    /// A Boolean value that indicates whether the item identified
+    /// by this tag is a control item owned by Ice.
     var isControlItem: Bool {
-        MenuBarItemInfo.controlItems.contains(self)
+        MenuBarItemTag.controlItems.contains(self)
     }
 
-    /// A string representation of the info.
+    /// A string representation of the tag.
     var stringValue: String {
         var result = namespace.rawValue
         if !title.isEmpty {
@@ -40,31 +42,31 @@ struct MenuBarItemInfo: Hashable, CustomStringConvertible {
         return result
     }
 
-    /// A textual representation of the info.
+    /// A textual representation of the tag.
     var description: String {
         stringValue
     }
 
-    /// Creates info with the given namespace and title.
+    /// Creates a tag with the given namespace and title.
     init(namespace: Namespace, title: String) {
         self.namespace = namespace
         self.title = title
     }
 
-    /// Creates info for the control item with the given identifier.
+    /// Creates a tag for the control item with the given identifier.
     private init(controlItem identifier: ControlItem.Identifier) {
         self.init(namespace: .ice, title: identifier.rawValue)
     }
 }
 
-// MARK: MenuBarItemInfo Constants
+// MARK: MenuBarItemTag Constants
 
-extension MenuBarItemInfo {
+extension MenuBarItemTag {
 
     // MARK: Special Item Lists
 
-    /// An array of infos for items whose movement is prevented by macOS.
-    static let immovableItems: [MenuBarItemInfo] = {
+    /// An array of tags for items whose movement is prevented by macOS.
+    static let immovableItems: [MenuBarItemTag] = {
         var items = [clock, controlCenter]
         if #unavailable(macOS 26.0) {
             items.append(siri)
@@ -80,8 +82,8 @@ extension MenuBarItemInfo {
     //
     // We're using macOS 15.3.2 for now, but it could be earlier.
     //
-    /// An array of infos for items that can be moved, but cannot be hidden.
-    static let nonHideableItems: [MenuBarItemInfo] = {
+    /// An array of tags for items that can be moved, but cannot be hidden.
+    static let nonHideableItems: [MenuBarItemTag] = {
         var items = [audioVideoModule, faceTime, screenCaptureUI]
         if #unavailable(macOS 15.3.2) {
             items.append(musicRecognition)
@@ -89,61 +91,61 @@ extension MenuBarItemInfo {
         return items
     }()
 
-    /// An array of infos for items representing Ice's control items.
-    static let controlItems = ControlItem.Identifier.allCases.map { $0.info }
+    /// An array of tags for items representing Ice's control items.
+    static let controlItems = ControlItem.Identifier.allCases.map { $0.tag }
 
     // MARK: Control Items
 
-    /// Info for the control item for the visible section.
-    static let visibleControlItem = MenuBarItemInfo(controlItem: .visible)
+    /// A tag for the control item for the visible section.
+    static let visibleControlItem = MenuBarItemTag(controlItem: .visible)
 
-    /// Info for the control item for the hidden section.
-    static let hiddenControlItem = MenuBarItemInfo(controlItem: .hidden)
+    /// A tag for the control item for the hidden section.
+    static let hiddenControlItem = MenuBarItemTag(controlItem: .hidden)
 
-    /// Info for the control item for the always-hidden section.
-    static let alwaysHiddenControlItem = MenuBarItemInfo(controlItem: .alwaysHidden)
+    /// A tag for the control item for the always-hidden section.
+    static let alwaysHiddenControlItem = MenuBarItemTag(controlItem: .alwaysHidden)
 
     // MARK: Other System Items
 
-    /// Info for the "Clock" item.
-    static let clock = MenuBarItemInfo(namespace: .controlCenter, title: "Clock")
+    /// A tag for the "Clock" item.
+    static let clock = MenuBarItemTag(namespace: .controlCenter, title: "Clock")
 
-    /// Info for the "Siri" item.
-    static let siri: MenuBarItemInfo = {
+    /// A tag for the "Siri" item.
+    static let siri: MenuBarItemTag = {
         if #available(macOS 26.0, *) {
-            MenuBarItemInfo(namespace: .controlCenter, title: "Siri")
+            MenuBarItemTag(namespace: .controlCenter, title: "Siri")
         } else {
-            MenuBarItemInfo(namespace: .systemUIServer, title: "Siri")
+            MenuBarItemTag(namespace: .systemUIServer, title: "Siri")
         }
     }()
 
-    /// Info for the "Control Center" item.
-    static let controlCenter: MenuBarItemInfo = {
+    /// A tag for the "Control Center" item.
+    static let controlCenter: MenuBarItemTag = {
         if #available(macOS 26.0, *) {
-            MenuBarItemInfo(namespace: .controlCenter, title: "BentoBox-0")
+            MenuBarItemTag(namespace: .controlCenter, title: "BentoBox-0")
         } else {
-            MenuBarItemInfo(namespace: .controlCenter, title: "BentoBox")
+            MenuBarItemTag(namespace: .controlCenter, title: "BentoBox")
         }
     }()
 
-    /// Info for the item that appears in the menu bar while the screen or system
-    /// audio is being recorded.
-    static let audioVideoModule = MenuBarItemInfo(namespace: .controlCenter, title: "AudioVideoModule")
+    /// A tag for the item that appears in the menu bar while the screen
+    /// or system audio is being recorded.
+    static let audioVideoModule = MenuBarItemTag(namespace: .controlCenter, title: "AudioVideoModule")
 
-    /// Info for the "FaceTime" item.
-    static let faceTime = MenuBarItemInfo(namespace: .controlCenter, title: "FaceTime")
+    /// A tag for the "FaceTime" item.
+    static let faceTime = MenuBarItemTag(namespace: .controlCenter, title: "FaceTime")
 
-    /// Info for the "MusicRecognition" (a.k.a. "Shazam") item.
-    static let musicRecognition = MenuBarItemInfo(namespace: .controlCenter, title: "MusicRecognition")
+    /// A tag for the "MusicRecognition" (a.k.a. "Shazam") item.
+    static let musicRecognition = MenuBarItemTag(namespace: .controlCenter, title: "MusicRecognition")
 
     // TODO: How do we reference this item in macOS 26?
-    /// Info for the "stop recording" item that appears in the menu bar during screen
-    /// recordings started by the macOS "Screenshot" tool.
-    static let screenCaptureUI = MenuBarItemInfo(namespace: .screenCaptureUI, title: "Item-0")
+    /// A tag for the "stop recording" item that appears in the menu bar
+    /// during screen recordings started by the macOS "Screenshot" tool.
+    static let screenCaptureUI = MenuBarItemTag(namespace: .screenCaptureUI, title: "Item-0")
 }
 
-// MARK: MenuBarItemInfo: Codable
-extension MenuBarItemInfo: Codable {
+// MARK: MenuBarItemTag: Codable
+extension MenuBarItemTag: Codable {
     init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         let string = try container.decode(String.self)
@@ -174,9 +176,9 @@ extension MenuBarItemInfo: Codable {
     }
 }
 
-// MARK: - MenuBarItemInfo.Namespace
+// MARK: - MenuBarItemTag.Namespace
 
-extension MenuBarItemInfo {
+extension MenuBarItemTag {
     /// A type that represents a menu bar item namespace.
     struct Namespace: Codable, Hashable, RawRepresentable, CustomStringConvertible {
         /// Private representation of a namespace.
@@ -241,8 +243,8 @@ extension MenuBarItemInfo {
     }
 }
 
-// MARK: MenuBarItemInfo.Namespace Constants
-extension MenuBarItemInfo.Namespace {
+// MARK: MenuBarItemTag.Namespace Constants
+extension MenuBarItemTag.Namespace {
     /// The namespace for menu bar items owned by Ice.
     static let ice = Self(Constants.bundleIdentifier)
 

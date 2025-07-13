@@ -85,7 +85,7 @@ final class LayoutBarItemView: NSView {
         if let appState {
             appState.imageCache.$images
                 .sink { [weak self] images in
-                    guard let self, let cachedImage = images[item.info] else {
+                    guard let self, let cachedImage = images[item.tag] else {
                         return
                     }
                     self.cachedImage = cachedImage

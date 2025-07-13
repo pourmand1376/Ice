@@ -345,9 +345,9 @@ extension CGRect {
 
 extension Collection where Element == MenuBarItem {
     /// Returns the first index where the menu bar item matching the specified
-    /// info appears in the collection.
-    func firstIndex(matching info: MenuBarItemInfo) -> Index? {
-        firstIndex { $0.info == info }
+    /// tag appears in the collection.
+    func firstIndex(matching tag: MenuBarItemTag) -> Index? {
+        firstIndex { $0.tag == tag }
     }
 }
 
@@ -360,6 +360,30 @@ extension Comparable {
     /// - Parameter limits: A closed range within which to clamp this value.
     func clamped(to limits: ClosedRange<Self>) -> Self {
         min(max(self, limits.lowerBound), limits.upperBound)
+    }
+}
+
+// MARK: - DispatchQueue
+
+extension DispatchQueue {
+    /// Creates and returns a new dispatch queue that targets the global
+    /// system queue with the specified quality-of-service class.
+    /// 
+    /// - Parameters:
+    ///   - label: A string label to identify the queue.
+    ///   - globalQoS: The quality-of-service level of the global system
+    ///     queue to target.
+    ///   - attributes: The attributes associated with the created queue.
+    ///     If the `concurrent` attribute is included, the queue
+    ///     schedules tasks concurrently. Otherwise, the queue schedules
+    ///     tasks serially in a first-in, first-out (FIFO) order.
+    static func globalTargeting(
+        label: String,
+        qos: DispatchQoS.QoSClass,
+        attributes: Attributes = []
+    ) -> DispatchQueue {
+        let target: DispatchQueue = .global(qos: qos)
+        return DispatchQueue(label: label, attributes: attributes, target: target)
     }
 }
 
@@ -571,9 +595,9 @@ extension RangeReplaceableCollection where Element: Hashable {
 
 extension RangeReplaceableCollection where Element == MenuBarItem {
     /// Removes and returns the first menu bar item that matches the
-    /// specified info.
-    mutating func removeFirst(matching info: MenuBarItemInfo) -> MenuBarItem? {
-        guard let index = firstIndex(matching: info) else {
+    /// specified tag.
+    mutating func removeFirst(matching tag: MenuBarItemTag) -> MenuBarItem? {
+        guard let index = firstIndex(matching: tag) else {
             return nil
         }
         return remove(at: index)
@@ -583,9 +607,9 @@ extension RangeReplaceableCollection where Element == MenuBarItem {
 // MARK: - Sequence where Element == MenuBarItem
 
 extension Sequence where Element == MenuBarItem {
-    /// Returns the first menu bar item that matches the specified info.
-    func first(matching info: MenuBarItemInfo) -> MenuBarItem? {
-        first { $0.info == info }
+    /// Returns the first menu bar item that matches the specified tag.
+    func first(matching tag: MenuBarItemTag) -> MenuBarItem? {
+        first { $0.tag == tag }
     }
 }
 

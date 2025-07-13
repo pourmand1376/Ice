@@ -20,8 +20,8 @@ final class ControlItem {
         /// The identifier for the control item for the always-hidden section.
         case alwaysHidden = "Ice.ControlItem.AlwaysHidden"
 
-        /// Info for the control item with this identifier.
-        var info: MenuBarItemInfo {
+        /// A tag for the control item with this identifier.
+        var tag: MenuBarItemTag {
             switch self {
             case .visible: .visibleControlItem
             case .hidden: .hiddenControlItem

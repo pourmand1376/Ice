@@ -10,6 +10,9 @@ import Cocoa
 
 /// A representation of an item in the menu bar.
 struct MenuBarItem: CustomStringConvertible {
+    /// The tag associated with this item.
+    let tag: MenuBarItemTag
+
     /// The item's window identifier.
     let windowID: CGWindowID
 
@@ -34,23 +37,20 @@ struct MenuBarItem: CustomStringConvertible {
     /// A Boolean value that indicates whether the item is on screen.
     let isOnScreen: Bool
 
-    /// The menu bar item info associated with this item.
-    let info: MenuBarItemInfo
-
     /// A Boolean value that indicates whether the item can be moved.
     var isMovable: Bool {
-        info.isMovable
+        tag.isMovable
     }
 
     /// A Boolean value that indicates whether the item can be hidden.
     var canBeHidden: Bool {
-        info.canBeHidden
+        tag.canBeHidden
     }
 
     /// A Boolean value that indicates whether the item is one of Ice's
     /// control items.
     var isControlItem: Bool {
-        info.isControlItem
+        tag.isControlItem
     }
 
     /// The application that owns the item.
@@ -84,7 +84,7 @@ struct MenuBarItem: CustomStringConvertible {
             title.flatMap { $0.starts(with: /Item-\d+/) ? fallback : $0 }
         }
         var bestName: String {
-            if info.isControlItem {
+            if isControlItem {
                 Constants.displayName
             } else if let sourceApplication {
                 sourceApplication.localizedName ??
@@ -107,7 +107,7 @@ struct MenuBarItem: CustomStringConvertible {
 
         // Most items will use their computed "best name", but we need to
         // handle a few special cases for system items.
-        return switch info.namespace {
+        return switch tag.namespace {
         case .passwords, .weather:
             // "PasswordsMenuBarExtra" -> "Passwords"
             // "WeatherMenu" -> "Weather"
@@ -117,7 +117,7 @@ struct MenuBarItem: CustomStringConvertible {
         case .controlCenter where title == "WiFi":
             title
         case .controlCenter where title.hasPrefix("Hearing"):
-            // Title of this item was changed to "Hearing_GlowE" in macOS 15.4.
+            // Changed to "Hearing_GlowE" in macOS 15.4.
             String(toTitleCase(title).prefix { $0.isLetter || $0.isNumber })
         case .systemUIServer where title.contains("TimeMachine"):
             // Sonoma:  "TimeMachine.TMMenuExtraHost"
@@ -135,20 +135,37 @@ struct MenuBarItem: CustomStringConvertible {
 
     /// A textual representation of the item.
     var description: String {
-        String(describing: info)
+        String(describing: tag)
     }
 
     /// A string to use for logging purposes.
     var logString: String {
-        "<\(info) (windowID: \(windowID))>"
+        "<\(tag) (windowID: \(windowID))>"
     }
 
-    /// Creates a menu bar item from the given window.
+    /// Creates a menu bar item without checks.
     ///
-    /// This initializer does not perform any checks on the window to ensure that
-    /// it is a valid menu bar item window. Only call this initializer if you are
-    /// certain that the window is valid.
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item.
+    private init(uncheckedItemWindow itemWindow: WindowInfo) {
+        self.tag = MenuBarItemTag(uncheckedItemWindow: itemWindow)
+        self.windowID = itemWindow.windowID
+        self.ownerPID = itemWindow.ownerPID
+        self.sourcePID = itemWindow.ownerPID
+        self.bounds = itemWindow.bounds
+        self.title = itemWindow.title
+        self.ownerName = itemWindow.ownerName
+        self.isOnScreen = itemWindow.isOnScreen
+    }
+
+    /// Creates a menu bar item without checks.
+    ///
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item
+    /// and the source pid belongs to the application that created it.
+    @available(macOS 26.0, *)
     private init(uncheckedItemWindow itemWindow: WindowInfo, sourcePID: pid_t?) {
+        self.tag = MenuBarItemTag(uncheckedItemWindow: itemWindow, sourcePID: sourcePID)
         self.windowID = itemWindow.windowID
         self.ownerPID = itemWindow.ownerPID
         self.sourcePID = sourcePID
@@ -156,7 +173,6 @@ struct MenuBarItem: CustomStringConvertible {
         self.title = itemWindow.title
         self.ownerName = itemWindow.ownerName
         self.isOnScreen = itemWindow.isOnScreen
-        self.info = MenuBarItemInfo(uncheckedItemWindow: itemWindow, sourcePID: sourcePID)
     }
 }
 
@@ -217,90 +233,135 @@ extension MenuBarItem {
     ///   using the Accessibility API to compare the window frame with
     ///   the frames of potential matching elements. Not very reliable,
     ///   or efficient.
+    @available(macOS 26.0, *)
     private static func getSourcePID(for window: WindowInfo) -> pid_t? {
         enum Context {
-            private static var cache = [CGWindowID: pid_t]()
+            private static var pidCache = [CGWindowID: pid_t]()
+            private static var extrasMenuBarCache = [pid_t: UIElement]()
 
-            static let concurrentQueue = DispatchQueue.queue(
-                "MenuBarItem.AXQueue.concurrent",
-                qos: .userInteractive,
-                concurrent: true
+            private static let pidQueue = DispatchQueue.globalTargeting(
+                label: "MenuBarItem.getSourcePID.pidQueue",
+                qos: .userInteractive
             )
-            static let serialQueue = DispatchQueue.queue(
-                "MenuBarItem.AXQueue.serial",
+            private static let extrasMenuBarQueue = DispatchQueue.globalTargeting(
+                label: "MenuBarItem.getSourcePID.extrasMenuBarQueue",
+                qos: .userInteractive
+            )
+            static let concurrentQueue = DispatchQueue.globalTargeting(
+                label: "MenuBarItem.getSourcePID.concurrentQueue",
                 qos: .userInteractive,
-                concurrent: false
+                attributes: .concurrent
             )
 
             static func pid(for windowID: CGWindowID) -> pid_t? {
-                serialQueue.sync { cache[windowID] }
+                pidQueue.sync { pidCache[windowID] }
             }
 
             static func set(_ pid: pid_t, for windowID: CGWindowID) {
-                serialQueue.sync { cache[windowID] = pid }
+                pidQueue.sync { pidCache[windowID] = pid }
+            }
+
+            static func extrasMenuBar(for pid: pid_t) -> UIElement? {
+                extrasMenuBarQueue.sync { extrasMenuBarCache[pid] }
+            }
+
+            static func set(_ extrasMenuBar: UIElement, for pid: pid_t) {
+                extrasMenuBarQueue.sync { extrasMenuBarCache[pid] = extrasMenuBar }
             }
         }
 
-        if #available(macOS 26.0, *) {
-            let windowID = window.windowID
+        let windowID = window.windowID
 
+        if let pid = Context.pid(for: windowID) {
+            return pid
+        }
+
+        let pid: pid_t? = Context.concurrentQueue.sync(flags: .barrier) {
             if let pid = Context.pid(for: windowID) {
                 return pid
             }
 
-            Context.concurrentQueue.async {
-                let windowCenter = window.bounds.center
+            let runningApps = with(NSWorkspace.shared.runningApplications) { apps in
+                if let index = apps.firstIndex(where: { $0.bundleIdentifier == "com.apple.controlcenter" }) {
+                    apps.append(apps.remove(at: index))
+                }
+            }
 
-                if
-                    let element = try? systemWideElement.elementAtPosition(windowCenter),
-                    let parent: UIElement = try? element.attribute(.parent),
-                    let role = try? parent.role(),
-                    case .menuBar = role,
-                    let pid = try? element.pid()
-                {
-                    Context.set(pid, for: windowID)
-                    return
+            for runningApp in runningApps {
+                // Since we're running concurrently, we could have a pid
+                // at any point.
+                if let pid = Context.pid(for: windowID) {
+                    return pid
                 }
 
-                for runningApp in NSWorkspace.shared.runningApplications {
-                    if Context.pid(for: windowID) != nil {
-                        return
+                // IMPORTANT: These checks help prevent some major thread
+                // blocking caused by the AX APIs.
+                guard
+                    runningApp.isFinishedLaunching,
+                    !runningApp.isTerminated,
+                    runningApp.activationPolicy != .prohibited
+                else {
+                    continue
+                }
+
+//                let pid = runningApp.processIdentifier
+//                let children: [UIElement]
+
+//                if let bar = Context.extrasMenuBar(for: pid) {
+//                    children = bar.children
+//                } else if
+//                    let app = Application(runningApp),
+//                    let bar: UIElement = try? app.attribute(.extrasMenuBar)
+//                {
+//                    Context.set(bar, for: pid)
+//                    children = bar.children
+//                } else {
+//                    continue
+//                }
+
+                guard
+                    let app = Application(runningApp),
+                    let bar: UIElement = try? app.attribute(.extrasMenuBar)
+                else {
+                    continue
+                }
+
+                for child in bar.children {
+                    if let pid = Context.pid(for: windowID) {
+                        return pid
                     }
-                    guard let app = Application(runningApp) else {
+
+                    // Item window may have moved. Get the current bounds.
+                    guard
+                        let windowBounds = Bridging.getWindowBounds(for: windowID),
+                        windowBounds == window.bounds
+                    else {
                         continue
                     }
-                    guard let bar: UIElement = try? app.attribute(.extrasMenuBar) else {
+
+                    guard
+                        let childFrame = child.frame,
+                        childFrame.center.distance(to: windowBounds.center) <= 10
+                    else {
                         continue
                     }
-                    for child in bar.children {
-                        if Context.pid(for: windowID) != nil {
-                            return
-                        }
-                        if
-                            let frame = child.frame,
-                            frame.center.distance(to: windowCenter) <= 5
-                        {
-                            Context.set(runningApp.processIdentifier, for: windowID)
-                            return
-                        }
-                    }
+
+                    let pid = runningApp.processIdentifier
+                    Context.set(pid, for: windowID)
+                    return pid
                 }
             }
 
             return nil
-        } else {
-            return window.ownerPID
         }
+
+        return pid
     }
 
-    /// Creates and returns a list of menu bar items for the given display.
-    ///
-    /// - Parameters:
-    ///   - display: An identifier for a display. Pass `nil` to return the menu bar
-    ///     items across all available displays.
-    ///   - option: Options that filter the returned list. Pass an empty option set
-    ///     to return all available menu bar items.
-    static func getMenuBarItems(on display: CGDirectDisplayID? = nil, option: ListOption) -> [MenuBarItem] {
+    /// Creates and returns a list of menu bar items using experimental
+    /// source pid retrieval for macOS 26.
+    @available(macOS 26.0, *)
+    private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
         let cachedTimeout = UIElement.globalMessagingTimeout
         UIElement.globalMessagingTimeout = 0.1
         defer {
@@ -312,25 +373,49 @@ extension MenuBarItem {
             return MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
         }
     }
+
+    /// Creates and returns a list of menu bar items, defaulting to the
+    /// legacy source pid behavior, prior to macOS 26.
+    private static func getMenuBarItemsLegacyMethod(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
+        getMenuBarItemWindows(on: display, option: option).map { window in
+            MenuBarItem(uncheckedItemWindow: window)
+        }
+    }
+
+    /// Creates and returns a list of menu bar items for the given display.
+    ///
+    /// - Parameters:
+    ///   - display: An identifier for a display. Pass `nil` to return the menu bar
+    ///     items across all available displays.
+    ///   - option: Options that filter the returned list. Pass an empty option set
+    ///     to return all available menu bar items.
+    static func getMenuBarItems(on display: CGDirectDisplayID? = nil, option: ListOption) -> [MenuBarItem] {
+        if #available(macOS 26.0, *) {
+            getMenuBarItemsExperimental(on: display, option: option)
+        } else {
+            getMenuBarItemsLegacyMethod(on: display, option: option)
+        }
+    }
 }
 
 // MARK: MenuBarItem: Equatable
 extension MenuBarItem: Equatable {
     static func == (lhs: MenuBarItem, rhs: MenuBarItem) -> Bool {
+        lhs.tag == rhs.tag &&
         lhs.windowID == rhs.windowID &&
         lhs.ownerPID == rhs.ownerPID &&
         lhs.sourcePID == rhs.sourcePID &&
         NSStringFromRect(lhs.bounds) == NSStringFromRect(rhs.bounds) &&
         lhs.title == rhs.title &&
         lhs.ownerName == rhs.ownerName &&
-        lhs.isOnScreen == rhs.isOnScreen &&
-        lhs.info == rhs.info
+        lhs.isOnScreen == rhs.isOnScreen
     }
 }
 
 // MARK: MenuBarItem: Hashable
 extension MenuBarItem: Hashable {
     func hash(into hasher: inout Hasher) {
+        hasher.combine(tag)
         hasher.combine(windowID)
         hasher.combine(ownerPID)
         hasher.combine(sourcePID)
@@ -338,19 +423,32 @@ extension MenuBarItem: Hashable {
         hasher.combine(title)
         hasher.combine(ownerName)
         hasher.combine(isOnScreen)
-        hasher.combine(info)
     }
 }
 
-// MARK: - MenuBarItemInfo Helper
+// MARK: - MenuBarItemTag Helper
 
-private extension MenuBarItemInfo {
-    /// Creates an item info without checks.
+private extension MenuBarItemTag {
+    /// Creates a tag without checks.
     ///
-    /// This initializer does not perform validation on its parameters.
-    /// Only call this initializer if you are certain that the window
-    /// is a menu bar item, and that the source PID belongs to the
-    /// application that created it.
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item.
+    init(uncheckedItemWindow itemWindow: WindowInfo) {
+        let title = itemWindow.title ?? ""
+        if title.hasPrefix("Ice.ControlItem") {
+            self.namespace = .ice
+        } else {
+            self.namespace = Namespace(uncheckedItemWindow: itemWindow)
+        }
+        self.title = title
+    }
+
+    /// Creates a tag without checks.
+    ///
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item
+    /// and the source pid belongs to the application that created it.
+    @available(macOS 26.0, *)
     init(uncheckedItemWindow itemWindow: WindowInfo, sourcePID: pid_t?) {
         let title = itemWindow.title ?? ""
         if title.hasPrefix("Ice.ControlItem") {
@@ -362,15 +460,34 @@ private extension MenuBarItemInfo {
     }
 }
 
-// MARK: - MenuBarItemInfo.Namespace Helper
+// MARK: - MenuBarItemTag.Namespace Helper
 
-private extension MenuBarItemInfo.Namespace {
+private extension MenuBarItemTag.Namespace {
     /// Creates a namespace without checks.
     ///
-    /// This initializer does not perform validation on its parameters.
-    /// Only call this initializer if you are certain that the window
-    /// is a menu bar item, and that the source PID belongs to the
-    /// application that created it.
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item.
+    init(uncheckedItemWindow itemWindow: WindowInfo) {
+        // Most apps have a bundle ID, but we should be able to handle apps
+        // that don't. We should also be able to handle daemons and helpers,
+        // which are more likely not to have a bundle ID.
+        //
+        // Use the name of the owning process as a fallback. The non-localized
+        // name seems less likely to change, so let's prefer it as a (somewhat)
+        // stable identifier.
+        if let app = itemWindow.owningApplication {
+            self.init(app.bundleIdentifier ?? itemWindow.ownerName ?? app.localizedName)
+        } else {
+            self.init(itemWindow.ownerName)
+        }
+    }
+
+    /// Creates a namespace without checks.
+    ///
+    /// This initializer does not perform validity checks on its parameters.
+    /// Only call it if you are certain the window is a valid menu bar item
+    /// and the source pid belongs to the application that created it.
+    @available(macOS 26.0, *)
     init(uncheckedItemWindow itemWindow: WindowInfo, sourcePID: pid_t?) {
         // Most apps have a bundle ID, but we should be able to handle apps
         // that don't. We should also be able to handle daemons and helpers,
@@ -382,15 +499,5 @@ private extension MenuBarItemInfo.Namespace {
         } else {
             self.init(itemWindow.ownerName)
         }
-    }
-}
-
-// MARK: - DispatchQueue Helper
-
-private extension DispatchQueue {
-    /// Boilerplate reducer for creating a queue that targets
-    /// a global system queue.
-    static func queue(_ label: String, qos: DispatchQoS, concurrent: Bool) -> DispatchQueue {
-        DispatchQueue(label: label, attributes: concurrent ? .concurrent : [], target: .global(qos: qos.qosClass))
     }
 }

@@ -182,7 +182,7 @@ private struct MenuBarSearchContentView: View {
 
     private enum ItemID: Hashable {
         case header(MenuBarSection.Name)
-        case item(MenuBarItemInfo)
+        case item(MenuBarItemTag)
     }
 
     @EnvironmentObject var itemManager: MenuBarItemManager
@@ -294,7 +294,7 @@ private struct MenuBarSearchContentView: View {
             items.append((headerItem, section.displayString))
 
             for item in itemManager.itemCache.managedItems(for: section).reversed() {
-                let listItem = ListItem.item(id: .item(item.info)) {
+                let listItem = ListItem.item(id: .item(item.tag)) {
                     performAction(for: item)
                 } content: {
                     MenuBarSearchItemView(item: item)
@@ -319,10 +319,8 @@ private struct MenuBarSearchContentView: View {
 
     private func menuBarItem(for selection: ItemID) -> MenuBarItem? {
         switch selection {
-        case .item(let info):
-            itemManager.itemCache.managedItems.first { $0.info == info }
-        case .header:
-            nil
+        case .item(let tag): itemManager.itemCache.managedItems.first(matching: tag)
+        case .header: nil
         }
     }
 
@@ -456,7 +454,7 @@ private struct MenuBarSearchItemView: View {
 
     private var image: NSImage {
         guard
-            let cachedImage = imageCache.images[item.info],
+            let cachedImage = imageCache.images[item.tag],
             let trimmedImage = cachedImage.cgImage.trimmingTransparentPixels(around: [.minXEdge, .maxXEdge])
         else {
             return NSImage()
@@ -470,7 +468,7 @@ private struct MenuBarSearchItemView: View {
 
     private var appIcon: NSImage {
         if
-            item.info.namespace == .systemUIServer,
+            item.tag.namespace == .systemUIServer,
             let icon = controlCenterIcon
         {
             return icon

@@ -34,14 +34,14 @@ final class MenuBarItemImageCache: ObservableObject {
     /// The result of an image capture operation.
     private struct CaptureResult {
         /// The successfully captured images.
-        var images = [MenuBarItemInfo: CapturedImage]()
+        var images = [MenuBarItemTag: CapturedImage]()
 
         /// The menu bar items excluded from the capture.
         var excluded = [MenuBarItem]()
     }
 
-    /// The cached item images, keyed by their corresponding item infos.
-    @Published private(set) var images = [MenuBarItemInfo: CapturedImage]()
+    /// The cached item images, keyed by their corresponding tags.
+    @Published private(set) var images = [MenuBarItemTag: CapturedImage]()
 
     /// Logger for the menu bar item image cache.
     private let logger = Logger(category: "MenuBarItemImageCache")
@@ -157,7 +157,7 @@ final class MenuBarItemImageCache: ObservableObject {
                 continue
             }
 
-            result.images[item.info] = CapturedImage(cgImage: image, scale: scale)
+            result.images[item.tag] = CapturedImage(cgImage: image, scale: scale)
         }
 
         return result
@@ -176,15 +176,15 @@ final class MenuBarItemImageCache: ObservableObject {
                 result.excluded.append(item)
                 continue
             }
-            result.images[item.info] = CapturedImage(cgImage: image, scale: scale)
+            result.images[item.tag] = CapturedImage(cgImage: image, scale: scale)
         }
 
         return result
     }
 
     /// Captures the images of the given menu bar items and returns a dictionary
-    /// containing the images, keyed by their menu bar item infos.
-    private nonisolated func captureImages(for items: [MenuBarItem], screen: NSScreen) -> [MenuBarItemInfo: CapturedImage] {
+    /// containing the images, keyed by their menu bar item tags.
+    private nonisolated func captureImages(for items: [MenuBarItem], screen: NSScreen) -> [MenuBarItemTag: CapturedImage] {
         let scale = screen.backingScaleFactor
 
         let compositeResult = compositeCapture(items, scale: scale)
@@ -210,8 +210,8 @@ final class MenuBarItemImageCache: ObservableObject {
     }
 
     /// Captures the images of the menu bar items in the given section and returns
-    /// a dictionary containing the images, keyed by their menu bar item infos.
-    private func captureImages(for section: MenuBarSection.Name, screen: NSScreen) async -> [MenuBarItemInfo: CapturedImage] {
+    /// a dictionary containing the images, keyed by their menu bar item tags.
+    private func captureImages(for section: MenuBarSection.Name, screen: NSScreen) async -> [MenuBarItemTag: CapturedImage] {
         guard let appState else {
             return [:]
         }
@@ -232,7 +232,7 @@ final class MenuBarItemImageCache: ObservableObject {
             return
         }
 
-        var newImages = [MenuBarItemInfo: CapturedImage]()
+        var newImages = [MenuBarItemTag: CapturedImage]()
 
         for section in sections {
             guard await !appState.itemManager.itemCache[section].isEmpty else {
@@ -333,7 +333,7 @@ final class MenuBarItemImageCache: ObservableObject {
             return false
         }
         let keys = Set(images.keys)
-        for item in items where keys.contains(item.info) {
+        for item in items where keys.contains(item.tag) {
             return false
         }
         return true
