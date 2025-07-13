@@ -363,30 +363,6 @@ extension Comparable {
     }
 }
 
-// MARK: - DispatchQueue
-
-extension DispatchQueue {
-    /// Creates and returns a new dispatch queue that targets the global
-    /// system queue with the specified quality-of-service class.
-    /// 
-    /// - Parameters:
-    ///   - label: A string label to identify the queue.
-    ///   - globalQoS: The quality-of-service level of the global system
-    ///     queue to target.
-    ///   - attributes: The attributes associated with the created queue.
-    ///     If the `concurrent` attribute is included, the queue
-    ///     schedules tasks concurrently. Otherwise, the queue schedules
-    ///     tasks serially in a first-in, first-out (FIFO) order.
-    static func globalTargeting(
-        label: String,
-        qos: DispatchQoS.QoSClass,
-        attributes: Attributes = []
-    ) -> DispatchQueue {
-        let target: DispatchQueue = .global(qos: qos)
-        return DispatchQueue(label: label, attributes: attributes, target: target)
-    }
-}
-
 // MARK: - EdgeInsets
 
 extension EdgeInsets {

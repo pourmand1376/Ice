@@ -5,6 +5,7 @@
 
 import AXSwift
 import Cocoa
+import Combine
 
 // MARK: - MenuBarItem
 
@@ -226,150 +227,12 @@ extension MenuBarItem {
             }
     }
 
-    /// Returns a (potentially cached) identifier for the process that
-    /// created a menu bar item window.
-    ///
-    /// - Note: The source pid is determined using a best effort guess,
-    ///   using the Accessibility API to compare the window frame with
-    ///   the frames of potential matching elements. Not very reliable,
-    ///   or efficient.
-    @available(macOS 26.0, *)
-    private static func getSourcePID(for window: WindowInfo) -> pid_t? {
-        enum Context {
-            private static var pidCache = [CGWindowID: pid_t]()
-            private static var extrasMenuBarCache = [pid_t: UIElement]()
-
-            private static let pidQueue = DispatchQueue.globalTargeting(
-                label: "MenuBarItem.getSourcePID.pidQueue",
-                qos: .userInteractive
-            )
-            private static let extrasMenuBarQueue = DispatchQueue.globalTargeting(
-                label: "MenuBarItem.getSourcePID.extrasMenuBarQueue",
-                qos: .userInteractive
-            )
-            static let concurrentQueue = DispatchQueue.globalTargeting(
-                label: "MenuBarItem.getSourcePID.concurrentQueue",
-                qos: .userInteractive,
-                attributes: .concurrent
-            )
-
-            static func pid(for windowID: CGWindowID) -> pid_t? {
-                pidQueue.sync { pidCache[windowID] }
-            }
-
-            static func set(_ pid: pid_t, for windowID: CGWindowID) {
-                pidQueue.sync { pidCache[windowID] = pid }
-            }
-
-            static func extrasMenuBar(for pid: pid_t) -> UIElement? {
-                extrasMenuBarQueue.sync { extrasMenuBarCache[pid] }
-            }
-
-            static func set(_ extrasMenuBar: UIElement, for pid: pid_t) {
-                extrasMenuBarQueue.sync { extrasMenuBarCache[pid] = extrasMenuBar }
-            }
-        }
-
-        let windowID = window.windowID
-
-        if let pid = Context.pid(for: windowID) {
-            return pid
-        }
-
-        let pid: pid_t? = Context.concurrentQueue.sync(flags: .barrier) {
-            if let pid = Context.pid(for: windowID) {
-                return pid
-            }
-
-            let runningApps = with(NSWorkspace.shared.runningApplications) { apps in
-                if let index = apps.firstIndex(where: { $0.bundleIdentifier == "com.apple.controlcenter" }) {
-                    apps.append(apps.remove(at: index))
-                }
-            }
-
-            for runningApp in runningApps {
-                // Since we're running concurrently, we could have a pid
-                // at any point.
-                if let pid = Context.pid(for: windowID) {
-                    return pid
-                }
-
-                // IMPORTANT: These checks help prevent some major thread
-                // blocking caused by the AX APIs.
-                guard
-                    runningApp.isFinishedLaunching,
-                    !runningApp.isTerminated,
-                    runningApp.activationPolicy != .prohibited
-                else {
-                    continue
-                }
-
-//                let pid = runningApp.processIdentifier
-//                let children: [UIElement]
-
-//                if let bar = Context.extrasMenuBar(for: pid) {
-//                    children = bar.children
-//                } else if
-//                    let app = Application(runningApp),
-//                    let bar: UIElement = try? app.attribute(.extrasMenuBar)
-//                {
-//                    Context.set(bar, for: pid)
-//                    children = bar.children
-//                } else {
-//                    continue
-//                }
-
-                guard
-                    let app = Application(runningApp),
-                    let bar: UIElement = try? app.attribute(.extrasMenuBar)
-                else {
-                    continue
-                }
-
-                for child in bar.children {
-                    if let pid = Context.pid(for: windowID) {
-                        return pid
-                    }
-
-                    // Item window may have moved. Get the current bounds.
-                    guard
-                        let windowBounds = Bridging.getWindowBounds(for: windowID),
-                        windowBounds == window.bounds
-                    else {
-                        continue
-                    }
-
-                    guard
-                        let childFrame = child.frame,
-                        childFrame.center.distance(to: windowBounds.center) <= 10
-                    else {
-                        continue
-                    }
-
-                    let pid = runningApp.processIdentifier
-                    Context.set(pid, for: windowID)
-                    return pid
-                }
-            }
-
-            return nil
-        }
-
-        return pid
-    }
-
     /// Creates and returns a list of menu bar items using experimental
     /// source pid retrieval for macOS 26.
     @available(macOS 26.0, *)
     private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
-        let cachedTimeout = UIElement.globalMessagingTimeout
-        UIElement.globalMessagingTimeout = 0.1
-        defer {
-            UIElement.globalMessagingTimeout = cachedTimeout
-        }
-
-        return getMenuBarItemWindows(on: display, option: option).map { window in
-            let sourcePID = getSourcePID(for: window)
+        getMenuBarItemWindows(on: display, option: option).map { window in
+            let sourcePID = SourcePIDsContext.getCachedPID(for: window)
             return MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
         }
     }
@@ -423,6 +286,154 @@ extension MenuBarItem: Hashable {
         hasher.combine(title)
         hasher.combine(ownerName)
         hasher.combine(isOnScreen)
+    }
+}
+
+// MARK: - Source PID Helpers
+
+extension MenuBarItem {
+    @available(macOS 26.0, *)
+    private enum SourcePIDsCache {
+        private static var pids = [CGWindowID: pid_t]()
+        private static var runningApps = [NSRunningApplication]() {
+            willSet {
+                let newPIDs = Set(newValue.map { $0.processIdentifier })
+                for (key, value) in pids where !newPIDs.contains(value) {
+                    pids.removeValue(forKey: key)
+                }
+            }
+            didSet {
+                let windows = MenuBarItem.getMenuBarItemWindows(option: .activeSpace)
+                for window in windows {
+                    concurrentUpdatesQueue.async {
+                        SourcePIDsContext.updateCachedPID(for: window)
+                    }
+                }
+            }
+        }
+
+        private static let pidsQueue = DispatchQueue.queue(
+            label: "MenuBarItem.SourcePIDsContext.pidsQueue",
+            qos: .userInteractive
+        )
+        private static let runningAppsQueue = DispatchQueue.queue(
+            label: "MenuBarItem.SourcePIDsContext.runningAppsQueue",
+            qos: .userInteractive
+        )
+        static let concurrentUpdatesQueue = DispatchQueue.queue(
+            label: "MenuBarItem.SourcePIDsContext.concurrentUpdatesQueue",
+            qos: .userInteractive,
+            attributes: .concurrent
+        )
+
+        private static var cancellable: AnyCancellable?
+
+        @MainActor
+        static func start(with permissions: AppPermissions) {
+            cancellable.take()?.cancel()
+
+            guard permissions.accessibility.hasPermission else {
+                return
+            }
+
+            cancellable = NSWorkspace.shared.publisher(for: \.runningApplications)
+                .receive(on: runningAppsQueue)
+                .sink { runningApps in
+                    var runningApps = runningApps
+                    if let index = runningApps.firstIndex(where: { $0.bundleIdentifier == "com.apple.controlcenter" }) {
+                        runningApps.append(runningApps.remove(at: index))
+                    }
+                    self.runningApps = runningApps
+                }
+        }
+
+        static func getPID(for windowID: CGWindowID) -> pid_t? {
+            pidsQueue.sync { pids[windowID] }
+        }
+
+        static func setPID(_ pid: pid_t?, for windowID: CGWindowID) {
+            pidsQueue.sync { pids[windowID] = pid }
+        }
+
+        static func getRunningApps() -> [NSRunningApplication] {
+            runningAppsQueue.sync { runningApps }
+        }
+    }
+
+    @available(macOS 26.0, *)
+    enum SourcePIDsContext {
+        @MainActor
+        static func startCache(with permissions: AppPermissions) {
+            SourcePIDsCache.start(with: permissions)
+        }
+
+        @discardableResult
+        fileprivate static func updateCachedPID(for window: WindowInfo) -> pid_t? {
+            let windowID = window.windowID
+
+            for runningApp in SourcePIDsCache.getRunningApps() {
+                // Since we're running concurrently, we could have a pid
+                // at any point.
+                if let pid = SourcePIDsCache.getPID(for: windowID) {
+                    return pid
+                }
+
+                // IMPORTANT: These checks help prevent some major thread
+                // blocking caused by the AX APIs.
+                guard
+                    runningApp.isFinishedLaunching,
+                    !runningApp.isTerminated,
+                    runningApp.activationPolicy != .prohibited
+                else {
+                    continue
+                }
+
+                guard
+                    let app = Application(runningApp),
+                    let bar: UIElement = try? app.attribute(.extrasMenuBar)
+                else {
+                    continue
+                }
+
+                for child in bar.children {
+                    if let pid = SourcePIDsCache.getPID(for: windowID) {
+                        return pid
+                    }
+
+                    // Item window may have moved. Get the current bounds.
+                    guard let windowBounds = Bridging.getWindowBounds(for: windowID) else {
+                        SourcePIDsCache.setPID(nil, for: windowID)
+                        return nil
+                    }
+
+                    guard windowBounds == window.bounds else {
+                        return nil
+                    }
+
+                    guard
+                        let childFrame = child.frame,
+                        childFrame.center.distance(to: windowBounds.center) <= 10
+                    else {
+                        continue
+                    }
+
+                    let pid = runningApp.processIdentifier
+                    SourcePIDsCache.setPID(pid, for: windowID)
+                    return pid
+                }
+            }
+
+            return nil
+        }
+
+        static func getCachedPID(for window: WindowInfo) -> pid_t? {
+            if let pid = SourcePIDsCache.getPID(for: window.windowID) {
+                return pid
+            }
+            return SourcePIDsCache.concurrentUpdatesQueue.sync {
+                updateCachedPID(for: window)
+            }
+        }
     }
 }
 
@@ -499,5 +510,20 @@ private extension MenuBarItemTag.Namespace {
         } else {
             self.init(itemWindow.ownerName)
         }
+    }
+}
+
+// MARK: - DispatchQueue Helper
+
+private extension DispatchQueue {
+    /// Creates and returns a new dispatch queue that targets the global
+    /// system queue with the specified quality-of-service class.
+    static func queue(
+        label: String,
+        qos: DispatchQoS.QoSClass,
+        attributes: Attributes = []
+    ) -> DispatchQueue {
+        let target: DispatchQueue = .global(qos: qos)
+        return DispatchQueue(label: label, attributes: attributes, target: target)
     }
 }

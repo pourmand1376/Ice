@@ -58,16 +58,24 @@ final class AppState: ObservableObject {
     /// Setup actions, run once on first access.
     private lazy var setupActions: () = {
         logger.info("Running setup actions")
-        configureCancellables()
+
         permissions.stopAllChecks()
+
+        if #available(macOS 26.0, *) {
+            MenuBarItem.SourcePIDsContext.startCache(with: permissions)
+        }
+
+        settings.performSetup(with: self)
+
         menuBarManager.performSetup(with: self)
         appearanceManager.performSetup(with: self)
         eventManager.performSetup(with: self)
-        settings.performSetup(with: self)
         itemManager.performSetup(with: self)
         imageCache.performSetup(with: self)
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
+
+        configureCancellables()
     }()
 
     /// Performs app state setup.
