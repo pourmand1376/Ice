@@ -1430,46 +1430,33 @@ extension MenuBarItemManager {
 
             let context: TempShownItemContext
 
-            if #available(macOS 26.0, *) {
+            if clickWhenFinished {
+                let beforeWindows = WindowInfo.getWindows(option: .onScreen)
+
                 await eventSleep()
                 try await click(item: item, with: mouseButton)
-                await eventSleep()
+                await eventSleep(for: .seconds(0.25))
 
-                // FIXME: Shown interface check is broken on macOS 26 (at least as of Developer Beta 1). Probably needs a significant rework.
+                let afterWindows = WindowInfo.getWindows(option: .onScreen)
+
+                let shownInterfaceWindow = afterWindows.first { afterWindow in
+                    afterWindow.ownerPID == item.sourcePID &&
+                    !beforeWindows.contains { beforeWindow in
+                        afterWindow.windowID == beforeWindow.windowID
+                    }
+                }
+
+                context = TempShownItemContext(
+                    tag: item.tag,
+                    returnDestination: destination,
+                    shownInterfaceWindow: shownInterfaceWindow
+                )
+            } else {
                 context = TempShownItemContext(
                     tag: item.tag,
                     returnDestination: destination,
                     shownInterfaceWindow: nil
                 )
-            } else {
-                if clickWhenFinished {
-                    let beforeWindows = WindowInfo.getWindows(option: .onScreen)
-
-                    await eventSleep()
-                    try await click(item: item, with: mouseButton)
-                    await eventSleep(for: .milliseconds(100))
-
-                    let afterWindows = WindowInfo.getWindows(option: .onScreen)
-
-                    let shownInterfaceWindow = afterWindows.first { afterWindow in
-                        afterWindow.ownerPID == item.ownerPID &&
-                        !beforeWindows.contains { beforeWindow in
-                            afterWindow.windowID == beforeWindow.windowID
-                        }
-                    }
-
-                    context = TempShownItemContext(
-                        tag: item.tag,
-                        returnDestination: destination,
-                        shownInterfaceWindow: shownInterfaceWindow
-                    )
-                } else {
-                    context = TempShownItemContext(
-                        tag: item.tag,
-                        returnDestination: destination,
-                        shownInterfaceWindow: nil
-                    )
-                }
             }
 
             return context
