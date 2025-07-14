@@ -62,7 +62,7 @@ final class AppState: ObservableObject {
         permissions.stopAllChecks()
 
         if #available(macOS 26.0, *) {
-            SourcePIDContext.startCache(with: permissions)
+            MenuBarItemSourceCache.start(with: permissions)
         }
 
         settings.performSetup(with: self)

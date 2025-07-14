@@ -232,7 +232,7 @@ extension MenuBarItem {
     @available(macOS 26.0, *)
     private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
         getMenuBarItemWindows(on: display, option: option).map { window in
-            let sourcePID = SourcePIDContext.getCachedPID(for: window)
+            let sourcePID = MenuBarItemSourceCache.getCachedPID(for: window)
             return MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
         }
     }
@@ -286,155 +286,6 @@ extension MenuBarItem: Hashable {
         hasher.combine(title)
         hasher.combine(ownerName)
         hasher.combine(isOnScreen)
-    }
-}
-
-// MARK: - SourcePIDContext
-
-@available(macOS 26.0, *)
-enum SourcePIDContext {
-    @MainActor
-    static func startCache(with permissions: AppPermissions) {
-        Cache.start(with: permissions)
-    }
-
-    @discardableResult
-    private static func updateCachedPID(for window: WindowInfo) -> pid_t? {
-        let windowID = window.windowID
-
-        for runningApp in Cache.getRunningApps() {
-            // Since we're running concurrently, we could have a pid
-            // at any point.
-            if let pid = Cache.getPID(for: windowID) {
-                return pid
-            }
-
-            // IMPORTANT: These checks help prevent some major thread
-            // blocking caused by the AX APIs.
-            guard
-                runningApp.isFinishedLaunching,
-                !runningApp.isTerminated,
-                runningApp.activationPolicy != .prohibited
-            else {
-                continue
-            }
-
-            guard
-                let app = Application(runningApp),
-                let bar: UIElement = try? app.attribute(.extrasMenuBar)
-            else {
-                continue
-            }
-
-            for child in bar.children {
-                if let pid = Cache.getPID(for: windowID) {
-                    return pid
-                }
-
-                // Item window may have moved. Get the current bounds.
-                guard let windowBounds = Bridging.getWindowBounds(for: windowID) else {
-                    Cache.setPID(nil, for: windowID)
-                    return nil
-                }
-
-                guard windowBounds == window.bounds else {
-                    return nil
-                }
-
-                guard
-                    let childFrame = child.frame,
-                    childFrame.center.distance(to: windowBounds.center) <= 10
-                else {
-                    continue
-                }
-
-                let pid = runningApp.processIdentifier
-                Cache.setPID(pid, for: windowID)
-                return pid
-            }
-        }
-
-        return nil
-    }
-
-    static func getCachedPID(for window: WindowInfo) -> pid_t? {
-        if let pid = Cache.getPID(for: window.windowID) {
-            return pid
-        }
-        return Cache.concurrentQueue.sync {
-            updateCachedPID(for: window)
-        }
-    }
-}
-
-// MARK: - SourcePIDContext.Cache
-@available(macOS 26.0, *)
-extension SourcePIDContext {
-    private enum Cache {
-        private static var pids = [CGWindowID: pid_t]()
-        private static var runningApps = [NSRunningApplication]() {
-            willSet {
-                let newPIDs = Set(newValue.map { $0.processIdentifier })
-                for (key, value) in pids where !newPIDs.contains(value) {
-                    pids.removeValue(forKey: key)
-                }
-            }
-            didSet {
-                let windows = MenuBarItem.getMenuBarItemWindows(option: .activeSpace)
-                for window in windows {
-                    concurrentQueue.async {
-                        updateCachedPID(for: window)
-                    }
-                }
-            }
-        }
-
-        private static let pidsQueue = DispatchQueue.queue(
-            label: "MenuBarItem.SourcePIDsContext.pidsQueue",
-            qos: .userInteractive
-        )
-        private static let runningAppsQueue = DispatchQueue.queue(
-            label: "MenuBarItem.SourcePIDsContext.runningAppsQueue",
-            qos: .userInteractive
-        )
-        static let concurrentQueue = DispatchQueue.queue(
-            label: "MenuBarItem.SourcePIDsContext.concurrentQueue",
-            qos: .userInteractive,
-            attributes: .concurrent
-        )
-
-        private static var cancellable: AnyCancellable?
-
-        @MainActor
-        static func start(with permissions: AppPermissions) {
-            cancellable.take()?.cancel()
-
-            guard permissions.accessibility.hasPermission else {
-                return
-            }
-
-            cancellable = NSWorkspace.shared.publisher(for: \.runningApplications)
-                .receive(on: runningAppsQueue)
-                .sink { runningApps in
-                    var runningApps = runningApps
-                    if let index = runningApps.firstIndex(where: { $0.bundleIdentifier == "com.apple.controlcenter" }) {
-                        runningApps.append(runningApps.remove(at: index))
-                    }
-                    self.runningApps = runningApps
-                }
-        }
-
-        static func getPID(for windowID: CGWindowID) -> pid_t? {
-            pidsQueue.sync { pids[windowID] }
-        }
-
-        static func setPID(_ pid: pid_t?, for windowID: CGWindowID) {
-            pidsQueue.sync { pids[windowID] = pid }
-        }
-
-        static func getRunningApps() -> [NSRunningApplication] {
-            runningAppsQueue.sync { runningApps }
-        }
     }
 }
 
@@ -511,20 +362,5 @@ private extension MenuBarItemTag.Namespace {
         } else {
             self.init(itemWindow.ownerName)
         }
-    }
-}
-
-// MARK: - DispatchQueue Helper
-
-private extension DispatchQueue {
-    /// Creates and returns a new dispatch queue that targets the global
-    /// system queue with the specified quality-of-service class.
-    static func queue(
-        label: String,
-        qos: DispatchQoS.QoSClass,
-        attributes: Attributes = []
-    ) -> DispatchQueue {
-        let target: DispatchQueue = .global(qos: qos)
-        return DispatchQueue(label: label, attributes: attributes, target: target)
     }
 }
