@@ -13,7 +13,7 @@ startListener()
 // Create the listener that receives incoming session requests from clients.
 func startListener() {
     do {
-        _ = try XPCListener(service: "com.jordanbaird.MenuBarItemService") { request in
+        _ = try XPCListener(service: "com.jordanbaird.Ice.MenuBarItemService") { request in
             // When a session request arrives, you must either accept or reject it.
             // The listener invokes the closure you specify every time a
             // message is received.
@@ -49,7 +49,7 @@ func performTask(with message: XPCReceivedMessage) -> Encodable? {
  To use this service from an app or other process, use XPCSession to establish a connection to the service.
  
     do {
-        session = try XPCSession(xpcService: "com.jordanbaird.MenuBarItemService")
+        session = try XPCSession(xpcService: "com.jordanbaird.Ice.MenuBarItemService")
     } catch {
         print("Failed to connect to listener, error: \(error)")
     }
