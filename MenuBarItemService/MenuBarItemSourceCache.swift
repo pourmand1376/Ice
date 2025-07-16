@@ -11,20 +11,20 @@ import os.lock
 // MARK: - MenuBarItemSourceCache
 
 enum MenuBarItemSourceCache {
-//    private static let axQueue = DispatchQueue.queue(
-//        label: "MenuBarItemSourceCache.axQueue",
-//        qos: .utility,
-//        attributes: .concurrent
-//    )
-//    private static let serialWorkQueue = DispatchQueue(
-//        label: "MenuBarItemSourceCache.serialWorkQueue",
-//        qos: .userInteractive
-//    )
-//    private static let concurrentWorkQueue = DispatchQueue(
-//        label: "MenuBarItemSourceCache.concurrentWorkQueue",
-//        qos: .userInteractive,
-//        attributes: .concurrent
-//    )
+    private static let axQueue = DispatchQueue.queue(
+        label: "MenuBarItemSourceCache.axQueue",
+        qos: .utility,
+        attributes: .concurrent
+    )
+    private static let serialWorkQueue = DispatchQueue(
+        label: "MenuBarItemSourceCache.serialWorkQueue",
+        qos: .userInteractive
+    )
+    private static let concurrentWorkQueue = DispatchQueue(
+        label: "MenuBarItemSourceCache.concurrentWorkQueue",
+        qos: .userInteractive,
+        attributes: .concurrent
+    )
 
     private final class CachedApplication: Sendable {
         private struct ExtrasMenuBarLazyStorage: @unchecked Sendable {
@@ -49,7 +49,7 @@ enum MenuBarItemSourceCache {
                 // calling AX APIs (app could be unresponsive, or in some
                 // other invalid state).
                 guard
-                    // !Bridging.isProcessUnresponsive(processIdentifier),
+                    !Bridging.isProcessUnresponsive(processIdentifier),
                     runningApp.isFinishedLaunching,
                     !runningApp.isTerminated,
                     runningApp.activationPolicy != .prohibited
@@ -57,22 +57,16 @@ enum MenuBarItemSourceCache {
                     return nil
                 }
 
-                defer {
-                    storage.hasInitialized = true
+                storage.extrasMenuBar = axQueue.sync {
+                    guard let app = Application(runningApp) else {
+                        return nil
+                    }
+                    return try? app.attribute(.extrasMenuBar)
                 }
 
-                guard let app = Application(runningApp) else {
-                    print("NO APP")
-                    return nil
-                }
+                storage.hasInitialized = true
 
-                guard let bar: UIElement? = try? app.attribute(.extrasMenuBar) else {
-                    print("NO EXTRASMENUBAR")
-                    return nil
-                }
-
-                storage.extrasMenuBar = bar
-                return bar
+                return storage.extrasMenuBar
             }
         }
 
@@ -96,35 +90,31 @@ enum MenuBarItemSourceCache {
                 }
 
                 guard let bar = app.extrasMenuBar else {
-                    print("NO BAR")
                     continue
                 }
 
-                for child in bar.children {
+                for child in axQueue.sync(execute: { bar.children }) {
                     if pids[windowID] != nil {
                         return
                     }
 
                     // Item window may have moved. Get the current bounds.
                     guard let windowBounds = Bridging.getWindowBounds(for: windowID) else {
-                        print("NO BOUNDS BRIDGED")
                         pids.removeValue(forKey: windowID)
                         return
                     }
 
                     guard windowBounds == window.bounds else {
-                        print("NO MATCH")
                         return
                     }
 
                     guard
-                        let childFrame = child.frame,
+                        let childFrame = axQueue.sync(execute: { child.frame }),
                         childFrame.center.distance(to: windowBounds.center) <= 10
                     else {
                         continue
                     }
 
-                    print("HAS PID:", windowID, app.processIdentifier)
                     pids[windowID] = app.processIdentifier
                     return
                 }
@@ -137,11 +127,9 @@ enum MenuBarItemSourceCache {
 
     static func start() {
         cancellable = NSWorkspace.shared.publisher(for: \.runningApplications)
-            .receive(on: RunLoop.current)
+            .receive(on: serialWorkQueue)
             .sink { runningApps in
-                print("INSIDE")
                 guard checkIsProcessTrusted(prompt: false) else {
-                    print("NOT TRUSTED")
                     return
                 }
 
@@ -174,27 +162,25 @@ enum MenuBarItemSourceCache {
                     }
                 }
 
-//                let windows = WindowInfo.createMenuBarWindows(option: .itemsOnly)
-//                if windows.isEmpty {
-//                    print("EMPTY WINDOWS")
-//                }
-//
-//                for window in windows {
-//                    print("IS WINDOW")
-//                    state.withLock { state in
-//                        state.updateCachedPID(for: window)
-//                    }
-//                }
+                for window in WindowInfo.createMenuBarWindows(option: .itemsOnly) {
+                    concurrentWorkQueue.async {
+                        state.withLock { state in
+                            state.updateCachedPID(for: window)
+                        }
+                    }
+                }
             }
     }
 
     static func getCachedPID(for window: WindowInfo) -> pid_t? {
-        state.withLock { state in
-            if let pid = state.pids[window.windowID] {
-                return pid
+        concurrentWorkQueue.sync {
+            state.withLock { state in
+                if let pid = state.pids[window.windowID] {
+                    return pid
+                }
+                state.updateCachedPID(for: window)
+                return state.pids[window.windowID]
             }
-            state.updateCachedPID(for: window)
-            return state.pids[window.windowID]
         }
     }
 }
