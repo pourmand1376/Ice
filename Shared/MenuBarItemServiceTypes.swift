@@ -1,8 +1,6 @@
 //
 //  MenuBarItemServiceTypes.swift
-//  MenuBarItemService
-//
-//  Created by Jordan Baird on 7/16/25.
+//  Ice
 //
 
 // A sample codable type that contains two numbers to be added together.
