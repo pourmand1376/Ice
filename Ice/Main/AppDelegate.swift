@@ -51,14 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.permissions.logger.info("Failed required permissions checks")
             appState.performSetup(hasPermissions: false)
         }
-
-        Task {
-            try await Task.sleep(for: .seconds(3))
-            callService()
-
-            try await Task.sleep(for: .seconds(3))
-            callService()
-        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -92,32 +84,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.activate(withPolicy: .regular)
             appState.openWindow(.settings)
         }
-    }
-
-    func callService() {
-        print("Calling XPC service...")
-
-        let session: XPCSession
-
-        do {
-            session = try XPCSession(xpcService: "com.jordanbaird.Ice.MenuBarItemService")
-        } catch {
-            print("Failed to connect to listener, error: \(error)")
-            return
-        }
-
-        do {
-            let request = CalculationRequest(firstNumber: 23, secondNumber: 19)
-            let reply = try session.sendSync(request)
-            let response = try reply.decode(as: CalculationResponse.self)
-
-            DispatchQueue.main.async {
-                print("Received response with result: \(response.result)")
-            }
-        } catch {
-            print("Failed to send message or decode reply: \(error.localizedDescription)")
-        }
-
-        session.cancel(reason: "Done with calculation")
     }
 }

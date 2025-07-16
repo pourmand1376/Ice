@@ -1425,13 +1425,13 @@ extension MenuBarItemManager {
             let context: TempShownItemContext
 
             if clickWhenFinished {
-                let beforeWindows = WindowInfo.getWindows(option: .onScreen)
+                let beforeWindows = WindowInfo.createWindows(option: .onScreen)
 
                 await eventSleep()
                 try await click(item: item, with: mouseButton)
                 await eventSleep(for: .seconds(0.25))
 
-                let afterWindows = WindowInfo.getWindows(option: .onScreen)
+                let afterWindows = WindowInfo.createWindows(option: .onScreen)
 
                 let shownInterfaceWindow = afterWindows.first { afterWindow in
                     afterWindow.ownerPID == item.sourcePID &&

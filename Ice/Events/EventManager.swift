@@ -239,7 +239,7 @@ extension EventManager {
             // Get the window that the user has clicked into.
             guard
                 let mouseLocation = MouseCursor.locationCoreGraphics,
-                let windowUnderMouse = WindowInfo.getWindows(option: .onScreen)
+                let windowUnderMouse = WindowInfo.createWindows(option: .onScreen)
                     .filter({ $0.layer < CGWindowLevelForKey(.cursorWindow) })
                     .first(where: { $0.bounds.contains(mouseLocation) && $0.title?.isEmpty == false }),
                 let owningApplication = windowUnderMouse.owningApplication

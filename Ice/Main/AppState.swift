@@ -61,12 +61,7 @@ final class AppState: ObservableObject {
 
         permissions.stopAllChecks()
 
-        if #available(macOS 26.0, *) {
-            MenuBarItemSourceCache.start(with: permissions)
-        }
-
         settings.performSetup(with: self)
-
         menuBarManager.performSetup(with: self)
         appearanceManager.performSetup(with: self)
         eventManager.performSetup(with: self)

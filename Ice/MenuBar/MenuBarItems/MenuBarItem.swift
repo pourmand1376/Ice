@@ -224,7 +224,7 @@ extension MenuBarItem {
     @available(macOS 26.0, *)
     private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
         getMenuBarItemWindows(on: display, option: option).map { window in
-            let sourcePID = MenuBarItemSourceCache.getCachedPID(for: window)
+            let sourcePID = MenuBarItemSourceHelper.getCachedPID(for: window)
             return MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
         }
     }

@@ -6,6 +6,10 @@
 	<dict>
 		<key>ServiceType</key>
 		<string>Application</string>
+		<key>JoinExistingSession</key>
+		<true/>
+		<key>RunLoopType</key>
+		<string>NSRunLoop</string>
 	</dict>
 </dict>
 </plist>
