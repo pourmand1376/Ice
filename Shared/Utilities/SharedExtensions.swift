@@ -26,3 +26,18 @@ extension CGError {
         }
     }
 }
+
+// MARK: - DispatchQueue
+
+extension DispatchQueue {
+    /// Creates and returns a new dispatch queue that targets the global
+    /// system queue with the specified quality-of-service class.
+    static func queue(
+        label: String,
+        qos: DispatchQoS.QoSClass,
+        attributes: Attributes = []
+    ) -> DispatchQueue {
+        let target: DispatchQueue = .global(qos: qos)
+        return DispatchQueue(label: label, attributes: attributes, target: target)
+    }
+}

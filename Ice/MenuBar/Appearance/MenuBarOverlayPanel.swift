@@ -557,11 +557,11 @@ private final class MenuBarOverlayPanelContentView: NSView {
             return CGRect(x: rect.minX, y: rect.minY, width: maxX, height: rect.height)
         }()
         let trailingPathBounds: CGRect = {
-            let items = MenuBarItem.getMenuBarItems(on: screen.displayID, option: .onScreen)
-            guard !items.isEmpty else {
+            let itemWindows = MenuBarItem.getMenuBarItemWindows(on: screen.displayID, option: .onScreen)
+            guard !itemWindows.isEmpty else {
                 return .zero
             }
-            let totalWidth = items.reduce(into: 0) { width, item in
+            let totalWidth = itemWindows.reduce(into: 0) { width, item in
                 width += item.bounds.width
             }
             var position = rect.maxX - totalWidth

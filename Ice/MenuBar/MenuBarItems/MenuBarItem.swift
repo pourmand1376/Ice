@@ -222,11 +222,14 @@ extension MenuBarItem {
     /// Creates and returns a list of menu bar items using experimental
     /// source pid retrieval for macOS 26.
     @available(macOS 26.0, *)
-    private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) -> [MenuBarItem] {
-        getMenuBarItemWindows(on: display, option: option).map { window in
-            let sourcePID = MenuBarItemSourceHelper.getCachedPID(for: window)
-            return MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
+    private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) async -> [MenuBarItem] {
+        var items = [MenuBarItem]()
+        for window in getMenuBarItemWindows(on: display, option: option) {
+            let sourcePID = await MenuBarItemSourceHelper.getCachedPID(for: window)
+            let item = MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
+            items.append(item)
         }
+        return items
     }
 
     /// Creates and returns a list of menu bar items, defaulting to the
@@ -244,9 +247,9 @@ extension MenuBarItem {
     ///     items across all available displays.
     ///   - option: Options that filter the returned list. Pass an empty option set
     ///     to return all available menu bar items.
-    static func getMenuBarItems(on display: CGDirectDisplayID? = nil, option: ListOption) -> [MenuBarItem] {
+    static func getMenuBarItems(caller: String = #function, on display: CGDirectDisplayID? = nil, option: ListOption) async -> [MenuBarItem] {
         if #available(macOS 26.0, *) {
-            getMenuBarItemsExperimental(on: display, option: option)
+            await getMenuBarItemsExperimental(on: display, option: option)
         } else {
             getMenuBarItemsLegacyMethod(on: display, option: option)
         }
@@ -313,6 +316,26 @@ private extension MenuBarItemTag {
         }
         self.title = title
     }
+
+//    /// Creates a tag without checks.
+//    ///
+//    /// This initializer does not perform validity checks on its parameters.
+//    /// Only call it if you are certain the window is a valid menu bar item.
+//    init(uncheckedItemWindow itemWindow: WindowInfo) {
+//        self.namespace = Namespace(uncheckedItemWindow: itemWindow)
+//        self.title = itemWindow.title ?? ""
+//    }
+//
+//    /// Creates a tag without checks.
+//    ///
+//    /// This initializer does not perform validity checks on its parameters.
+//    /// Only call it if you are certain the window is a valid menu bar item
+//    /// and the source pid belongs to the application that created it.
+//    @available(macOS 26.0, *)
+//    init(uncheckedItemWindow itemWindow: WindowInfo, sourcePID: pid_t?) {
+//        self.namespace = Namespace(uncheckedItemWindow: itemWindow, sourcePID: sourcePID)
+//        self.title = itemWindow.title ?? ""
+//    }
 }
 
 // MARK: - MenuBarItemTag.Namespace Helper

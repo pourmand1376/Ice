@@ -190,34 +190,36 @@ final class MenuBarManager: ObservableObject {
                         return
                     }
 
-                    // Get all items.
-                    var items = MenuBarItem.getMenuBarItems(on: displayID, option: .activeSpace)
+                    Task {
+                        // Get all items.
+                        var items = await MenuBarItem.getMenuBarItems(on: displayID, option: .activeSpace)
 
-                    // Filter the items down according to the currently enabled/shown sections.
-                    if
-                        let alwaysHiddenSection = section(withName: .alwaysHidden),
-                        alwaysHiddenSection.isEnabled
-                    {
-                        if alwaysHiddenSection.controlItem.state == .hideSection {
-                            if let alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map({ items.remove(at: $0) }) {
-                                items.trimPrefix { $0.bounds.maxX <= alwaysHiddenControlItem.bounds.minX }
+                        // Filter the items down according to the currently enabled/shown sections.
+                        if
+                            let alwaysHiddenSection = self.section(withName: .alwaysHidden),
+                            alwaysHiddenSection.isEnabled
+                        {
+                            if alwaysHiddenSection.controlItem.state == .hideSection {
+                                if let alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map({ items.remove(at: $0) }) {
+                                    items.trimPrefix { $0.bounds.maxX <= alwaysHiddenControlItem.bounds.minX }
+                                }
+                            }
+                        } else {
+                            if let hiddenControlItem = items.firstIndex(matching: .hiddenControlItem).map({ items.remove(at: $0) }) {
+                                items.trimPrefix { $0.bounds.maxX <= hiddenControlItem.bounds.minX }
                             }
                         }
-                    } else {
-                        if let hiddenControlItem = items.firstIndex(matching: .hiddenControlItem).map({ items.remove(at: $0) }) {
-                            items.trimPrefix { $0.bounds.maxX <= hiddenControlItem.bounds.minX }
+
+                        // Get the leftmost item on the screen.
+                        guard let leftmostItem = items.min(by: { $0.bounds.minX < $1.bounds.minX }) else {
+                            return
                         }
-                    }
 
-                    // Get the leftmost item on the screen.
-                    guard let leftmostItem = items.min(by: { $0.bounds.minX < $1.bounds.minX }) else {
-                        return
-                    }
-
-                    // If the minX of the item is less than or equal to the maxX of the
-                    // application menu frame, activate the app to hide the menu.
-                    if leftmostItem.bounds.minX <= applicationMenuFrame.maxX {
-                        hideApplicationMenus()
+                        // If the minX of the item is less than or equal to the maxX of the
+                        // application menu frame, activate the app to hide the menu.
+                        if leftmostItem.bounds.minX <= applicationMenuFrame.maxX {
+                            self.hideApplicationMenus()
+                        }
                     }
                 } else if isHidingApplicationMenus {
                     showApplicationMenus()

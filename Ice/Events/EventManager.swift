@@ -479,12 +479,12 @@ extension EventManager {
         guard let mouseLocation = MouseCursor.locationCoreGraphics else {
             return false
         }
-        let menuBarItems = MenuBarItem.getMenuBarItems(
-            on: screen.displayID,
-            option: [.onScreen, .activeSpace]
-        )
-        return menuBarItems.contains { item in
-            item.bounds.contains(mouseLocation)
+        let windowIDs = Bridging.getMenuBarWindowList(option: [.onScreen, .activeSpace, .itemsOnly])
+        return windowIDs.contains { windowID in
+            guard let bounds = Bridging.getWindowBounds(for: windowID) else {
+                return false
+            }
+            return bounds.contains(mouseLocation)
         }
     }
 
