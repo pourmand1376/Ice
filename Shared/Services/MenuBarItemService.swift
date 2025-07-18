@@ -15,6 +15,6 @@ extension MenuBarItemService {
     }
 
     struct SourcePIDResponse: Codable {
-        let sourcePID: pid_t?
+        let pid: pid_t?
     }
 }

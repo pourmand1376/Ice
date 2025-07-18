@@ -82,7 +82,7 @@ enum MenuBarItemServiceConnection {
                 request: MenuBarItemService.SourcePIDRequest(window: window),
                 expecting: MenuBarItemService.SourcePIDResponse.self
             )
-            continuation.resume(returning: response?.sourcePID)
+            continuation.resume(returning: response?.pid)
         }
     }
 }

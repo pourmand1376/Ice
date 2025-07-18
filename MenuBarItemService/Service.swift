@@ -9,7 +9,7 @@ import Foundation
 enum Service {
     static func main() throws {
         try Listener.shared.activate()
-        MenuBarItemSourceCache.start()
+        SourcePIDCache.start()
         RunLoop.current.run()
     }
 }

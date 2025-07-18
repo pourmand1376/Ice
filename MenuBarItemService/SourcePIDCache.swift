@@ -1,5 +1,5 @@
 //
-//  MenuBarItemSourceCache.swift
+//  SourcePIDCache.swift
 //  MenuBarItemService
 //
 
@@ -8,43 +8,9 @@ import Cocoa
 import Combine
 import os.lock
 
-enum AXHelpers {
-    private static let queue = DispatchQueue.globalTargetingQueue(
-        label: "AXHelpers.queue",
-        qos: .utility,
-        attributes: .concurrent
-    )
-
-    static func isProcessTrusted() -> Bool {
-        queue.sync { checkIsProcessTrusted(prompt: false) }
-    }
-
-    static func application(for runningApp: NSRunningApplication) -> Application? {
-        queue.sync { Application(runningApp) }
-    }
-
-    static func extrasMenuBar(for app: Application) -> UIElement? {
-        queue.sync { try? app.attribute(.extrasMenuBar) }
-    }
-
-    static func children(for element: UIElement) -> [UIElement] {
-        queue.sync { try? element.arrayAttribute(.children) } ?? []
-    }
-
-    static func isEnabled(_ element: UIElement) -> Bool {
-        queue.sync { try? element.attribute(.enabled) } ?? false
-    }
-
-    static func frame(for element: UIElement) -> CGRect? {
-        queue.sync { try? element.attribute(.frame) }
-    }
-}
-
-// MARK: - MenuBarItemSourceCache
-
-enum MenuBarItemSourceCache {
+enum SourcePIDCache {
     private static let concurrentQueue = DispatchQueue.globalTargetingQueue(
-        label: "MenuBarItemSourceCache.concurrentQueue",
+        label: "SourceCache.concurrentQueue",
         qos: .userInteractive,
         attributes: .concurrent
     )
@@ -209,7 +175,7 @@ enum MenuBarItemSourceCache {
 
     /// Returns the cached pid for the given window, updating the
     /// cache if needed.
-    static func getCachedPID(for window: WindowInfo) -> pid_t? {
+    static func pid(for window: WindowInfo) -> pid_t? {
         concurrentQueue.sync {
             state.withLock { state in
                 if let pid = state.pids[window.windowID] {

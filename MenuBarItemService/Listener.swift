@@ -39,8 +39,8 @@ final class Listener {
     private func handleMessage(_ message: XPCReceivedMessage) -> (any Encodable)? {
         do {
             let request = try message.decode(as: MenuBarItemService.SourcePIDRequest.self)
-            let sourcePID = MenuBarItemSourceCache.getCachedPID(for: request.window)
-            return MenuBarItemService.SourcePIDResponse(sourcePID: sourcePID)
+            let pid = SourcePIDCache.pid(for: request.window)
+            return MenuBarItemService.SourcePIDResponse(pid: pid)
         } catch {
             Logger.general.error("Service failed with error \(error)")
             return nil
@@ -58,7 +58,8 @@ final class Listener {
         }
     }
 
-    /// Activates the listener without checking if it is already active.
+    /// Activates the listener without checking if it is already
+    /// active.
     private func uncheckedActivate() throws {
         listener = try XPCListener(service: name) { [weak self] request in
             request.accept { message in
@@ -69,10 +70,11 @@ final class Listener {
 
     /// Activates the listener.
     ///
-    /// - Note: Calling this method on an active listener throws an error.
-    func activate() throws(ActivationError) {
+    /// - Note: This method throws an error if called on an active
+    ///   listener.
+    func activate() throws {
         guard listener == nil else {
-            throw .alreadyActive
+            throw ActivationError.alreadyActive
         }
         do {
             if #available(macOS 26.0, *) {
@@ -81,7 +83,7 @@ final class Listener {
                 try uncheckedActivate()
             }
         } catch {
-            throw .failure(error)
+            throw ActivationError.failure(error)
         }
     }
 
