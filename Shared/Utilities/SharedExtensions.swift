@@ -32,7 +32,7 @@ extension CGError {
 extension DispatchQueue {
     /// Creates and returns a new dispatch queue that targets the global
     /// system queue with the specified quality-of-service class.
-    static func queue(
+    static func globalTargetingQueue(
         label: String,
         qos: DispatchQoS.QoSClass,
         attributes: Attributes = []

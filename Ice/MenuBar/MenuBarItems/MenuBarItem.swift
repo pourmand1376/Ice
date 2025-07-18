@@ -103,8 +103,8 @@ struct MenuBarItem: CustomStringConvertible {
             // "PasswordsMenuBarExtra" -> "Passwords"
             // "WeatherMenu" -> "Weather"
             String(toTitleCase(bestName).prefix { !$0.isWhitespace })
-        case .textInput:
-            "Text Input"
+        case .textInputMenuAgent:
+            toTitleCase(bestName).components(separatedBy: .whitespaces).prefix { $0 != "Agent" }.joined(separator: " ")
         case .controlCenter where title.hasPrefix("BentoBox"):
             bestName
         case .controlCenter where title == "WiFi":
@@ -115,6 +115,7 @@ struct MenuBarItem: CustomStringConvertible {
         case .systemUIServer where title.contains("TimeMachine"):
             // Sonoma:  "TimeMachine.TMMenuExtraHost"
             // Sequoia: "TimeMachineMenuExtra.TMMenuExtraHost"
+            // Tahoe:   "com.apple.menuextra.TimeMachine"
             "Time Machine"
         case .controlCenter, .systemUIServer:
             // Most system items are hosted by one of these two apps. They
@@ -225,7 +226,7 @@ extension MenuBarItem {
     private static func getMenuBarItemsExperimental(on display: CGDirectDisplayID?, option: ListOption) async -> [MenuBarItem] {
         var items = [MenuBarItem]()
         for window in getMenuBarItemWindows(on: display, option: option) {
-            let sourcePID = await MenuBarItemSourceHelper.getCachedPID(for: window)
+            let sourcePID = await MenuBarItemServiceConnection.sourcePID(for: window)
             let item = MenuBarItem(uncheckedItemWindow: window, sourcePID: sourcePID)
             items.append(item)
         }

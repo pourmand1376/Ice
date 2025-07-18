@@ -442,6 +442,7 @@ private struct ShowItemButton: View {
     }
 }
 
+@MainActor
 private let controlCenterIcon: NSImage? = {
     guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.controlcenter").first else {
         return nil
@@ -474,7 +475,7 @@ private struct MenuBarSearchItemView: View {
             return nil
         }
         switch item.tag.namespace {
-        case .controlCenter, .systemUIServer, .textInput:
+        case .controlCenter, .systemUIServer, .textInputMenuAgent:
             return controlCenterIcon
         default:
             return sourceApplication.icon

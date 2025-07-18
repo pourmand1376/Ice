@@ -9,11 +9,15 @@ import Combine
 import os.lock
 
 enum AXHelpers {
-    private static let queue = DispatchQueue.queue(
+    private static let queue = DispatchQueue.globalTargetingQueue(
         label: "AXHelpers.queue",
         qos: .utility,
         attributes: .concurrent
     )
+
+    static func isProcessTrusted() -> Bool {
+        queue.sync { checkIsProcessTrusted(prompt: false) }
+    }
 
     static func application(for runningApp: NSRunningApplication) -> Application? {
         queue.sync { Application(runningApp) }
@@ -39,8 +43,8 @@ enum AXHelpers {
 // MARK: - MenuBarItemSourceCache
 
 enum MenuBarItemSourceCache {
-    private static let concurrentWorkQueue = DispatchQueue.queue(
-        label: "MenuBarItemSourceCache.concurrentWorkQueue",
+    private static let concurrentQueue = DispatchQueue.globalTargetingQueue(
+        label: "MenuBarItemSourceCache.concurrentQueue",
         qos: .userInteractive,
         attributes: .concurrent
     )
@@ -96,16 +100,19 @@ enum MenuBarItemSourceCache {
         /// This method blocks until stable bounds can be determined, or
         /// until retrieving the bounds for the window fails.
         private func stableBounds(for window: WindowInfo) -> CGRect? {
-            var bounds = window.bounds
+            var cachedBounds = window.bounds
 
             for n in 1...5 {
-                guard let latest = window.getLatestBounds() else {
+                guard let latestBounds = window.getLatestBounds() else {
+                    // Failure here means the window probably doesn't
+                    // exist anymore.
                     return nil
                 }
-                if bounds == latest {
-                    return bounds
+                if latestBounds == cachedBounds {
+                    return latestBounds
                 }
-                bounds = latest
+                cachedBounds = latestBounds
+                // Sleep interval increases with each attempt.
                 Thread.sleep(forTimeInterval: TimeInterval(n) / 100)
             }
 
@@ -130,7 +137,10 @@ enum MenuBarItemSourceCache {
         }
 
         mutating func updateCachedPID(for window: WindowInfo) {
-            guard let windowBounds = stableBounds(for: window) else {
+            guard
+                AXHelpers.isProcessTrusted(),
+                let windowBounds = stableBounds(for: window)
+            else {
                 return
             }
 
@@ -162,10 +172,6 @@ enum MenuBarItemSourceCache {
 
     static func start() {
         cancellable = NSWorkspace.shared.publisher(for: \.runningApplications).sink { runningApps in
-            guard checkIsProcessTrusted(prompt: false) else {
-                return
-            }
-
             state.withLock { state in
                 let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
 
@@ -201,8 +207,10 @@ enum MenuBarItemSourceCache {
         }
     }
 
+    /// Returns the cached pid for the given window, updating the
+    /// cache if needed.
     static func getCachedPID(for window: WindowInfo) -> pid_t? {
-        concurrentWorkQueue.sync {
+        concurrentQueue.sync {
             state.withLock { state in
                 if let pid = state.pids[window.windowID] {
                     return pid
@@ -235,6 +243,7 @@ private extension CGRect {
 // MARK: - WindowInfo Extension
 
 private extension WindowInfo {
+    /// Returns the latest bounds of the window.
     func getLatestBounds() -> CGRect? {
         Bridging.getWindowBounds(for: windowID)
     }
