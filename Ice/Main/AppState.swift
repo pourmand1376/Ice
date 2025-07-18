@@ -115,24 +115,36 @@ final class AppState: ObservableObject {
             Bridging.isActiveSpaceFullscreen()
         }
         .removeDuplicates()
-        .assign(to: &$isActiveSpaceFullscreen)
+        .sink { [weak self] isFullscreen in
+            self?.isActiveSpaceFullscreen = isFullscreen
+        }
+        .store(in: &c)
 
         NSWorkspace.shared.publisher(for: \.frontmostApplication)
             .receive(on: DispatchQueue.main)
             .map { $0 == .current }
             .removeDuplicates()
-            .assign(to: &navigationState.$isAppFrontmost)
+            .sink { [weak self] isFrontmost in
+                self?.navigationState.isAppFrontmost = isFrontmost
+            }
+            .store(in: &c)
 
         publisherForWindow(.settings)
             .flatMap { $0.publisher } // Short circuit if nil.
             .flatMap { $0.publisher(for: \.isVisible) }
             .throttle(for: 0.1, scheduler: DispatchQueue.main, latest: true)
             .removeDuplicates()
-            .assign(to: &navigationState.$isSettingsPresented)
+            .sink { [weak self] isPresented in
+                self?.navigationState.isSettingsPresented = isPresented
+            }
+            .store(in: &c)
 
         eventManager.$isDraggingMenuBarItem
             .removeDuplicates()
-            .assign(to: &$isDraggingMenuBarItem)
+            .sink { [weak self] isDragging in
+                self?.isDraggingMenuBarItem = isDragging
+            }
+            .store(in: &c)
 
         Publishers.CombineLatest(
             navigationState.$isAppFrontmost,
@@ -186,7 +198,7 @@ final class AppState: ObservableObject {
 
     /// Returns a publisher for the window with the given identifier.
     func publisherForWindow(_ id: IceWindowIdentifier) -> some Publisher<NSWindow?, Never> {
-        return NSApp.publisher(for: \.windows).mergeMap { window in
+        NSApp.publisher(for: \.windows).mergeMap { window in
             window.publisher(for: \.identifier)
                 .map { [weak window] identifier in
                     guard identifier?.rawValue == id.rawValue else {

@@ -19,8 +19,7 @@ enum AXHelpers {
         queue.sync { Application(runningApp) }
     }
 
-    static func extrasMenuBar(for app: Application) throws -> UIElement? {
-        #warning("Make this throw and see if it's faster with the check below")
+    static func extrasMenuBar(for app: Application) -> UIElement? {
         queue.sync { try? app.attribute(.extrasMenuBar) }
     }
 
@@ -29,7 +28,7 @@ enum AXHelpers {
     }
 
     static func isEnabled(_ element: UIElement) -> Bool {
-        queue.sync { try? element.attribute(.enabled) } == true
+        queue.sync { try? element.attribute(.enabled) } ?? false
     }
 
     static func frame(for element: UIElement) -> CGRect? {
@@ -46,35 +45,16 @@ enum MenuBarItemSourceCache {
         attributes: .concurrent
     )
 
-    private final class CachedApplication: Sendable {
-        private enum ExtrasMenuBarState: @unchecked Sendable {
-            case uninitialized
-            case initialized(UIElement?)
-
-            var isInitialized: Bool {
-                switch self {
-                case .uninitialized: false
-                case .initialized: true
-                }
-            }
-
-            var extrasMenuBar: UIElement? {
-                switch self {
-                case .uninitialized: nil
-                case .initialized(let element): element
-                }
-            }
-
-            mutating func initialize(to element: UIElement?) {
-                self = .initialized(element)
-            }
-        }
-
+    private final class CachedApplication {
         private let runningApp: NSRunningApplication
-        private let state = OSAllocatedUnfairLock<ExtrasMenuBarState>(initialState: .uninitialized)
+        private var extrasMenuBar: UIElement?
 
         var processIdentifier: pid_t {
             runningApp.processIdentifier
+        }
+
+        var hasExtrasMenuBar: Bool {
+            extrasMenuBar != nil
         }
 
         var isValidForAccessibility: Bool {
@@ -83,139 +63,96 @@ enum MenuBarItemSourceCache {
             runningApp.isFinishedLaunching &&
             !runningApp.isTerminated &&
             runningApp.activationPolicy != .prohibited &&
-            !runningApp.isUnresponsive
-        }
-
-        var isInitialized: Bool {
-            state.withLock { $0.isInitialized }
-        }
-
-        var hasExtrasMenuBar: Bool {
-            state.withLock { $0.extrasMenuBar != nil }
-        }
-
-        private func initializeExtrasMenuBar() {
-            guard
-                !isInitialized,
-                isValidForAccessibility,
-                let app = AXHelpers.application(for: runningApp)
-            else {
-                return
-            }
-            do {
-                if let bar = try AXHelpers.extrasMenuBar(for: app) {
-                    state.withLock { $0.initialize(to: bar) }
-                }
-            } catch {
-                state.withLock { $0.initialize(to: nil) }
-            }
-        }
-
-        var extrasMenuBar: UIElement? {
-            initializeExtrasMenuBar()
-            return state.withLock { $0.extrasMenuBar }
+            !Bridging.isProcessUnresponsive(processIdentifier)
         }
 
         init(_ runningApp: NSRunningApplication) {
             self.runningApp = runningApp
         }
+
+        func getOrCreateExtrasMenuBar() -> UIElement? {
+            if let extrasMenuBar {
+                return extrasMenuBar
+            }
+            guard
+                isValidForAccessibility,
+                let app = AXHelpers.application(for: runningApp),
+                let bar = AXHelpers.extrasMenuBar(for: app)
+            else {
+                return nil
+            }
+            extrasMenuBar = bar
+            return bar
+        }
     }
 
-    private struct State: Sendable {
+    private struct State {
         var apps = [CachedApplication]()
         var pids = [CGWindowID: pid_t]()
 
-        private mutating func getStableWindowBounds(for window: WindowInfo) -> CGRect? {
-            let windowID = window.windowID
-            var windowBounds = window.bounds
+        /// Returns the latest bounds of the given window after ensuring
+        /// that the bounds are stable (a.k.a. not currently changing).
+        ///
+        /// This method blocks until stable bounds can be determined, or
+        /// until retrieving the bounds for the window fails.
+        private func stableBounds(for window: WindowInfo) -> CGRect? {
+            var bounds = window.bounds
 
-            while true {
-                guard let currentBounds = Bridging.getWindowBounds(for: windowID) else {
-                    pids.removeValue(forKey: windowID)
+            for n in 1...5 {
+                guard let latest = window.getLatestBounds() else {
                     return nil
                 }
-                if windowBounds != currentBounds {
-                    windowBounds = currentBounds
-                } else {
-                    break
+                if bounds == latest {
+                    return bounds
                 }
+                bounds = latest
+                Thread.sleep(forTimeInterval: TimeInterval(n) / 100)
             }
 
-            return windowBounds
+            return nil
         }
 
-        private mutating func updateCachedPID(for window: WindowInfo, in apps: [CachedApplication]) -> Bool {
-            guard let windowBounds = getStableWindowBounds(for: window) else {
-                return false
-            }
-
-            for app in apps {
-                // Since we're running concurrently, we could have a pid
-                // at any point.
-                if pids[window.windowID] != nil {
-                    return true
-                }
-
-                guard let bar = app.extrasMenuBar else {
-                    continue
-                }
-
-                for child in AXHelpers.children(for: bar) {
-                    if pids[window.windowID] != nil {
-                        return true
-                    }
-
-                    guard
-                        AXHelpers.isEnabled(child),
-                        let childFrame = AXHelpers.frame(for: child),
-                        childFrame.center.distance(to: windowBounds.center) <= 10
-                    else {
-                        continue
-                    }
-
-                    pids[window.windowID] = app.processIdentifier
-                    return true
-                }
-            }
-
-            return false
-        }
-
-        /// Returns an array of groups formed from the current apps that meet the
-        /// necessary criteria for iteration.
-        ///
-        /// The criteria for each group is as follows:
-        ///
-        /// - Group 1 (Index 0): Apps that are confirmed to have an extras menu bar.
-        /// - Group 2 (Index 1): Apps that have not yet been initialized (may or may
-        ///   not have an extras menu bar).
-        ///
-        /// Apps that don't meet the criteria for either group (a.k.a. apps that are
-        /// confirmed _not_ to have an extras menu bar) are excluded for efficiency.
-        private func createIterableAppGroups() -> [[CachedApplication]] {
-            var groups = [[CachedApplication]](repeating: [], count: 3)
+        /// Reorders the cached apps so that those that are confirmed
+        /// to have an extras menu bar are first in the array.
+        private mutating func partitionApps() {
+            var lhs = [CachedApplication]()
+            var rhs = [CachedApplication]()
 
             for app in apps {
                 if app.hasExtrasMenuBar {
-                    groups[0].append(app)
-                } else if !app.isInitialized {
-                    if app.isValidForAccessibility {
-                        groups[1].append(app)
-                    } else {
-                        groups[2].append(app)
-                    }
+                    lhs.append(app)
+                } else {
+                    rhs.append(app)
                 }
             }
 
-            return groups
+            apps = lhs + rhs
         }
 
         mutating func updateCachedPID(for window: WindowInfo) {
-            for group in createIterableAppGroups() {
-                guard updateCachedPID(for: window, in: group) else {
+            guard let windowBounds = stableBounds(for: window) else {
+                return
+            }
+
+            partitionApps()
+
+            for app in apps {
+                guard let bar = app.getOrCreateExtrasMenuBar() else {
                     continue
                 }
-                return
+                for child in AXHelpers.children(for: bar) {
+                    guard AXHelpers.isEnabled(child) else {
+                        continue
+                    }
+                    guard
+                        let childFrame = AXHelpers.frame(for: child),
+                        childFrame.center.distance(to: windowBounds.center) <= 1
+                    else {
+                        continue
+                    }
+                    pids[window.windowID] = app.processIdentifier
+                    return
+                }
             }
         }
     }
@@ -295,12 +232,10 @@ private extension CGRect {
     }
 }
 
-// MARK: - NSRunningApplication Extension
+// MARK: - WindowInfo Extension
 
-private extension NSRunningApplication {
-    /// A Boolean value that indicates whether the application's
-    /// process is unresponsive.
-    var isUnresponsive: Bool {
-        Bridging.isProcessUnresponsive(processIdentifier)
+private extension WindowInfo {
+    func getLatestBounds() -> CGRect? {
+        Bridging.getWindowBounds(for: windowID)
     }
 }
