@@ -55,23 +55,25 @@ final class AppState: ObservableObject {
     /// Logger for the app state.
     private let logger = Logger(category: "AppState")
 
-    /// Setup actions, run once on first access.
-    private lazy var setupActions: () = {
-        logger.info("Running setup actions")
-
+    /// Async setup actions, run once on first access.
+    private lazy var setupTask = Task {
         permissions.stopAllChecks()
+
+        if #available(macOS 26.0, *) {
+            await MenuBarItemService.Connection.shared.start()
+        }
 
         settings.performSetup(with: self)
         menuBarManager.performSetup(with: self)
         appearanceManager.performSetup(with: self)
         eventManager.performSetup(with: self)
-        itemManager.performSetup(with: self)
+        await itemManager.performSetup(with: self)
         imageCache.performSetup(with: self)
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
 
         configureCancellables()
-    }()
+    }
 
     /// Performs app state setup.
     ///
@@ -79,11 +81,15 @@ final class AppState: ObservableObject {
     ///   If `false`, prompts the user to grant permissions.
     func performSetup(hasPermissions: Bool) {
         if hasPermissions {
-            _ = setupActions
+            Task {
+                logger.debug("Setting up app state")
+                await setupTask.value
+                logger.debug("Finished setting up app state")
+            }
         } else {
             Task {
                 // Delay to prevent conflicts with the app delegate.
-                try await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(100))
                 activate(withPolicy: .regular)
                 dismissWindow(.settings) // Shouldn't be open anyway.
                 openWindow(.permissions)

@@ -129,8 +129,9 @@ final class MenuBarItemManager: ObservableObject {
     }
 
     /// Sets up the manager.
-    func performSetup(with appState: AppState) {
+    func performSetup(with appState: AppState) async {
         self.appState = appState
+        await cacheItemsRegardless()
         configureCancellables(with: appState)
     }
 

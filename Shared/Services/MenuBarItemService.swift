@@ -10,11 +10,13 @@ enum MenuBarItemService {
 }
 
 extension MenuBarItemService {
-    struct SourcePIDRequest: Codable {
-        let window: WindowInfo
+    enum Request: Codable {
+        case start
+        case sourcePID(WindowInfo)
     }
 
-    struct SourcePIDResponse: Codable {
-        let pid: pid_t?
+    enum Response: Codable {
+        case start
+        case sourcePID(pid_t?)
     }
 }
