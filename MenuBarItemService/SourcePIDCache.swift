@@ -158,11 +158,6 @@ enum SourcePIDCache {
         }
     }
 
-    private static let concurrentQueue = DispatchQueue.targetingGlobalQueue(
-        label: "SourcePIDCache.concurrentQueue",
-        qos: .userInteractive,
-        attributes: .concurrent
-    )
     private static let state = OSAllocatedUnfairLock(initialState: State())
     private static var cancellable: AnyCancellable?
 
@@ -207,14 +202,12 @@ enum SourcePIDCache {
     /// Returns the cached process identifier for the given window,
     /// updating the cache if needed.
     static func pid(for window: WindowInfo) -> pid_t? {
-        concurrentQueue.sync {
-            state.withLock { state in
-                if let pid = state.pids[window.windowID] {
-                    return pid
-                }
-                state.updatePID(for: window)
-                return state.pids[window.windowID]
+        state.withLock { state in
+            if let pid = state.pids[window.windowID] {
+                return pid
             }
+            state.updatePID(for: window)
+            return state.pids[window.windowID]
         }
     }
 }
