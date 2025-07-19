@@ -39,7 +39,7 @@ final class Listener {
     private func handleMessage(_ message: XPCReceivedMessage) -> (any Encodable)? {
         do {
             let request = try message.decode(as: MenuBarItemService.SourcePIDRequest.self)
-            let pid = SourcePIDCache.pid(for: request.window)
+            let pid = SourcePIDCache.shared.pid(for: request.window)
             return MenuBarItemService.SourcePIDResponse(pid: pid)
         } catch {
             Logger.general.error("Service failed with error \(error)")

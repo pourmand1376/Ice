@@ -22,7 +22,7 @@ import os.lock
 /// an intensive process. Since Accessibility blocks the main thread, the
 /// cache lives in a separate XPC process, which the main process queries
 /// asynchronously.
-enum SourcePIDCache {
+final class SourcePIDCache {
     /// An object that contains a running application and provides an
     /// interface to access relevant information, such as its process
     /// identifier and extras menu bar.
@@ -158,50 +158,69 @@ enum SourcePIDCache {
         }
     }
 
-    private static let state = OSAllocatedUnfairLock(initialState: State())
-    private static var cancellable: AnyCancellable?
+    /// The shared cache.
+    static let shared = SourcePIDCache()
+
+    /// The cache's protected state.
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    /// Storage for the cache's observers.
+    private var cancellables = Set<AnyCancellable>()
+
+    /// Creates the shared cache.
+    private init() { }
 
     /// Starts the observers for the cache.
-    static func start() {
-        cancellable = NSWorkspace.shared.publisher(for: \.runningApplications).sink { runningApps in
-            state.withLock { state in
+    func start() {
+        var c = Set<AnyCancellable>()
+
+        NSWorkspace.shared.publisher(for: \.runningApplications)
+            .sink { [weak self] runningApps in
+                guard let self else {
+                    return
+                }
+
                 let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
 
-                // Convert the cached state to dictionaries keyed by pid to
-                // allow for efficient repeated access.
-                let appMappings = state.apps.reduce(into: [:]) { result, app in
-                    result[app.processIdentifier] = app
-                }
-                let pidMappings: [pid_t: [CGWindowID: pid_t]] = windowIDs.reduce(into: [:]) { result, windowID in
-                    if let pid = state.pids[windowID] {
-                        result[pid, default: [:]][windowID] = pid
+                state.withLock { state in
+                    // Convert the cached state to dictionaries keyed by pid to
+                    // allow for efficient repeated access.
+                    let appMappings = state.apps.reduce(into: [:]) { result, app in
+                        result[app.processIdentifier] = app
                     }
-                }
-
-                // Create a new state that matches the current running apps.
-                state = runningApps.reduce(into: State()) { result, app in
-                    let pid = app.processIdentifier
-
-                    if let app = appMappings[pid] {
-                        // Prefer the cached app, as it may have already done
-                        // the work to initialize its extras menu bar.
-                        result.apps.append(app)
-                    } else {
-                        // App wasn't in the cache, so it must be new.
-                        result.apps.append(CachedApplication(app))
+                    let pidMappings: [pid_t: [CGWindowID: pid_t]] = windowIDs.reduce(into: [:]) { result, windowID in
+                        if let pid = state.pids[windowID] {
+                            result[pid, default: [:]][windowID] = pid
+                        }
                     }
 
-                    if let pids = pidMappings[pid] {
-                        result.pids.merge(pids) { (_, new) in new }
+                    // Create a new state that matches the current running apps.
+                    state = runningApps.reduce(into: State()) { result, app in
+                        let pid = app.processIdentifier
+
+                        if let app = appMappings[pid] {
+                            // Prefer the cached app, as it may have already done
+                            // the work to initialize its extras menu bar.
+                            result.apps.append(app)
+                        } else {
+                            // App wasn't in the cache, so it must be new.
+                            result.apps.append(CachedApplication(app))
+                        }
+
+                        if let pids = pidMappings[pid] {
+                            result.pids.merge(pids) { (_, new) in new }
+                        }
                     }
                 }
             }
-        }
+            .store(in: &c)
+
+        cancellables = c
     }
 
     /// Returns the cached process identifier for the given window,
     /// updating the cache if needed.
-    static func pid(for window: WindowInfo) -> pid_t? {
+    func pid(for window: WindowInfo) -> pid_t? {
         state.withLock { state in
             if let pid = state.pids[window.windowID] {
                 return pid
