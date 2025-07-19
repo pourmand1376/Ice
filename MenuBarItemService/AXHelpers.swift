@@ -7,7 +7,7 @@ import AXSwift
 import Cocoa
 
 enum AXHelpers {
-    private static let queue = DispatchQueue.globalTargetingQueue(
+    private static let queue = DispatchQueue.targetingGlobalQueue(
         label: "AXHelpers.queue",
         qos: .utility,
         attributes: .concurrent

@@ -1,6 +1,6 @@
 //
 //  MenuBarItemService.swift
-//  Ice
+//  Shared
 //
 
 import Foundation

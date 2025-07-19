@@ -1,6 +1,6 @@
 //
 //  WindowInfo.swift
-//  Ice
+//  Shared
 //
 
 import Cocoa

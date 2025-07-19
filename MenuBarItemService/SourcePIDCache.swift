@@ -9,12 +9,6 @@ import Combine
 import os.lock
 
 enum SourcePIDCache {
-    private static let concurrentQueue = DispatchQueue.globalTargetingQueue(
-        label: "SourceCache.concurrentQueue",
-        qos: .userInteractive,
-        attributes: .concurrent
-    )
-
     private final class CachedApplication {
         private let runningApp: NSRunningApplication
         private var extrasMenuBar: UIElement?
@@ -102,7 +96,8 @@ enum SourcePIDCache {
             apps = lhs + rhs
         }
 
-        mutating func updateCachedPID(for window: WindowInfo) {
+        /// Updates the cached pid for the given window.
+        mutating func updatePID(for window: WindowInfo) {
             guard
                 AXHelpers.isProcessTrusted(),
                 let windowBounds = stableBounds(for: window)
@@ -133,6 +128,11 @@ enum SourcePIDCache {
         }
     }
 
+    private static let concurrentQueue = DispatchQueue.targetingGlobalQueue(
+        label: "SourcePIDCache.concurrentQueue",
+        qos: .userInteractive,
+        attributes: .concurrent
+    )
     private static let state = OSAllocatedUnfairLock(initialState: State())
     private static var cancellable: AnyCancellable?
 
@@ -181,7 +181,7 @@ enum SourcePIDCache {
                 if let pid = state.pids[window.windowID] {
                     return pid
                 }
-                state.updateCachedPID(for: window)
+                state.updatePID(for: window)
                 return state.pids[window.windowID]
             }
         }

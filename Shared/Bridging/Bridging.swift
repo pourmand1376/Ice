@@ -1,6 +1,6 @@
 //
 //  Bridging.swift
-//  Ice
+//  Shared
 //
 
 import Cocoa

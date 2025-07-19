@@ -99,7 +99,6 @@
 				7188A69E2E280BB4008F131D /* Shared */,
 				71BDFBE12C978E2A00EF145F /* Ice */,
 				7188A6842E27F9ED008F131D /* MenuBarItemService */,
-				7168EE512E281CBC00FF9830 /* Frameworks */,
 				7166832B2A767E6A006ABF84 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -111,13 +110,6 @@
 				7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		7168EE512E281CBC00FF9830 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

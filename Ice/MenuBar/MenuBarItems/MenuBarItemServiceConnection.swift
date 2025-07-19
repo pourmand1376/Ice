@@ -50,7 +50,7 @@ enum MenuBarItemServiceConnection {
             }
         }
 
-        private static let queue = DispatchQueue.globalTargetingQueue(
+        private static let queue = DispatchQueue.targetingGlobalQueue(
             label: "MenuBarItemServiceConnection.queue",
             qos: .userInteractive
         )

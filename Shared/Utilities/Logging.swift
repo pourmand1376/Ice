@@ -1,6 +1,6 @@
 //
 //  Logging.swift
-//  Ice
+//  Shared
 //
 
 import OSLog
