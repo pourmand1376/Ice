@@ -49,7 +49,7 @@
 		7188A6912E27F9ED008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
+				Resources/Info.plist,
 			);
 			target = 7188A6822E27F9ED008F131D /* MenuBarItemService */;
 		};
@@ -488,7 +488,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = MenuBarItemService/Info.plist;
+				INFOPLIST_FILE = MenuBarItemService/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "MenuBarItemService (Ice)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
@@ -516,7 +516,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = MenuBarItemService/Info.plist;
+				INFOPLIST_FILE = MenuBarItemService/Resources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "MenuBarItemService (Ice)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
