@@ -8,19 +8,41 @@ import Cocoa
 import Combine
 import os.lock
 
+/// A cache for the source process identifiers for menu bar item windows.
+///
+/// We use the term "source process" to refer to the process that created
+/// a menu bar item. We used to be able to use the window's `ownerPID` to
+/// determine this information, but in macOS 26 Tahoe, all item windows
+/// are owned by Control Center. We need to be able to accurately identify
+/// each item, and the source process is a good way to do that. Knowing
+/// the source process also gives us an accurate name to show in various
+/// places throughout the interface.
+///
+/// We can find what we need using the Accessibility API, but it's quite
+/// an intensive process. Since Accessibility blocks the main thread, the
+/// cache lives in a separate XPC process, which the main process queries
+/// asynchronously.
 enum SourcePIDCache {
+    /// An object that contains a running application and provides an
+    /// interface to access relevant information, such as its process
+    /// identifier and extras menu bar.
     private final class CachedApplication {
         private let runningApp: NSRunningApplication
         private var extrasMenuBar: UIElement?
 
+        /// The app's process identifier.
         var processIdentifier: pid_t {
             runningApp.processIdentifier
         }
 
+        /// A Boolean value indicating whether the app's extras menu
+        /// bar has been successfully created and stored.
         var hasExtrasMenuBar: Bool {
             extrasMenuBar != nil
         }
 
+        /// A Boolean value indicating whether the app is in a valid
+        /// state for making accessibility calls.
         var isValidForAccessibility: Bool {
             // These checks help prevent blocking that can occur when
             // calling AX APIs while the app is an invalid state.
@@ -30,10 +52,17 @@ enum SourcePIDCache {
             !Bridging.isProcessUnresponsive(processIdentifier)
         }
 
+        /// Creates a `CachedApplication` instance with the given running
+        /// application.
         init(_ runningApp: NSRunningApplication) {
             self.runningApp = runningApp
         }
 
+        /// Returns the accessibility element representing the app's extras
+        /// menu bar, creating it if necessary.
+        ///
+        /// When the element is first created, it gets stored for efficient
+        /// access on subsequent calls.
         func getOrCreateExtrasMenuBar() -> UIElement? {
             if let extrasMenuBar {
                 return extrasMenuBar
@@ -50,6 +79,7 @@ enum SourcePIDCache {
         }
     }
 
+    /// State for the cache.
     private struct State {
         var apps = [CachedApplication]()
         var pids = [CGWindowID: pid_t]()
@@ -96,7 +126,7 @@ enum SourcePIDCache {
             apps = lhs + rhs
         }
 
-        /// Updates the cached pid for the given window.
+        /// Updates the cached process identifier for the given window.
         mutating func updatePID(for window: WindowInfo) {
             guard
                 AXHelpers.isProcessTrusted(),
@@ -136,6 +166,7 @@ enum SourcePIDCache {
     private static let state = OSAllocatedUnfairLock(initialState: State())
     private static var cancellable: AnyCancellable?
 
+    /// Starts the observers for the cache.
     static func start() {
         cancellable = NSWorkspace.shared.publisher(for: \.runningApplications).sink { runningApps in
             state.withLock { state in
@@ -173,8 +204,8 @@ enum SourcePIDCache {
         }
     }
 
-    /// Returns the cached pid for the given window, updating the
-    /// cache if needed.
+    /// Returns the cached process identifier for the given window,
+    /// updating the cache if needed.
     static func pid(for window: WindowInfo) -> pid_t? {
         concurrentQueue.sync {
             state.withLock { state in
