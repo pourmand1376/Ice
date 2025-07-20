@@ -21,27 +21,32 @@ extension MenuBarItemService {
         /// The connection's target queue.
         private let queue: DispatchQueue
 
+        /// The connection's logger.
+        private let logger: Logger
+
         /// Creates a new connection.
         private init() {
-            let queue = DispatchQueue.targetingGlobalQueue(
-                label: "MenuBarItemService.Connection.queue",
-                qos: .userInteractive
-            )
-            self.session = Session(queue: queue)
+            let queue = DispatchQueue.targetingGlobal(label: "MenuBarItemService.Connection.queue", qos: .userInteractive)
+            let logger = Logger(category: "MenuBarItemService.Connection")
+            self.session = Session(queue: queue, logger: logger)
             self.queue = queue
+            self.logger = logger
         }
 
         /// Starts the connection.
         func start() async {
+            logger.debug("Starting MenuBarItemService connection")
+
             await withCheckedContinuation { continuation in
-                let response = session.send(
-                    request: MenuBarItemService.Request.start,
-                    expecting: MenuBarItemService.Response.self
-                )
+                guard let response = session.send(request: .start) else {
+                    logger.error("Start request returned nil")
+                    continuation.resume()
+                    return
+                }
                 if case .start = response {
                     continuation.resume()
                 } else {
-                    Logger.general.warning("Session returned invalid response for Request.start")
+                    logger.error("Start request returned invalid response \(String(describing: response))")
                     continuation.resume()
                 }
             }
@@ -50,14 +55,15 @@ extension MenuBarItemService {
         /// Returns the source process identifier for the given window.
         func sourcePID(for window: WindowInfo) async -> pid_t? {
             await withCheckedContinuation { continuation in
-                let response = session.send(
-                    request: MenuBarItemService.Request.sourcePID(window),
-                    expecting: MenuBarItemService.Response.self
-                )
+                guard let response = session.send(request: .sourcePID(window)) else {
+                    logger.error("Source PID request returned nil")
+                    continuation.resume(returning: nil)
+                    return
+                }
                 if case .sourcePID(let pid) = response {
                     continuation.resume(returning: pid)
                 } else {
-                    Logger.general.warning("Session returned invalid response for Request.sourcePID")
+                    logger.error("Source PID request returned invalid response \(String(describing: response))")
                     continuation.resume(returning: nil)
                 }
             }
@@ -72,20 +78,28 @@ extension MenuBarItemService {
     /// A wrapper around an XPC session.
     private final class Session: Sendable {
         /// A session's underlying storage.
-        private struct Storage: Sendable {
+        private final class Storage: @unchecked Sendable {
             private let name = MenuBarItemService.name
             private var session: XPCSession?
             private let queue: DispatchQueue
+            private let logger: Logger
 
-            init(queue: DispatchQueue) {
+            init(queue: DispatchQueue, logger: Logger) {
                 self.queue = queue
+                self.logger = logger
             }
 
-            private mutating func getOrCreateSession() throws -> XPCSession {
+            private func getOrCreateSession() throws -> XPCSession {
                 if let session {
                     return session
                 }
-                let session = try XPCSession(xpcService: name, options: .inactive)
+                let session = try XPCSession(xpcService: name, options: .inactive) { [weak self] error in
+                    guard let self else {
+                        return
+                    }
+                    logger.warning("Session was cancelled with error \(error.localizedDescription)")
+                    self.session = nil
+                }
                 session.setPeerRequirement(.isFromSameTeam())
                 session.setTargetQueue(queue)
                 try session.activate()
@@ -93,23 +107,20 @@ extension MenuBarItemService {
                 return session
             }
 
-            mutating func cancel(reason: String) {
+            func cancel(reason: String) {
                 guard let session = session.take() else {
                     return
                 }
                 session.cancel(reason: reason)
             }
 
-            mutating func send<Request: Encodable, Response: Decodable>(
-                request: Request,
-                expecting responseType: Response.Type
-            ) -> Response? {
+            func send(request: Request) -> Response? {
                 do {
                     let session = try getOrCreateSession()
                     let reply = try session.sendSync(request)
                     return try reply.decode(as: Response.self)
                 } catch {
-                    Logger.general.error("Session failed with error \(error)")
+                    logger.error("Session failed with error \(error)")
                     return nil
                 }
             }
@@ -121,10 +132,14 @@ extension MenuBarItemService {
         /// The session's target queue.
         private let queue: DispatchQueue
 
+        /// The session's logger.
+        private let logger: Logger
+
         /// Creates a new session.
-        init(queue: DispatchQueue) {
-            self.storage = OSAllocatedUnfairLock(initialState: Storage(queue: queue))
+        init(queue: DispatchQueue, logger: Logger) {
+            self.storage = OSAllocatedUnfairLock(initialState: Storage(queue: queue, logger: logger))
             self.queue = queue
+            self.logger = logger
         }
 
         deinit {
@@ -136,14 +151,10 @@ extension MenuBarItemService {
             storage.withLock { $0.cancel(reason: reason) }
         }
 
-        /// Sends the given request to the service and returns the response,
-        /// decoded as the given type.
-        func send<Request: Encodable, Response: Decodable>(
-            request: Request,
-            expecting responseType: Response.Type
-        ) -> Response? {
+        /// Sends the given request to the service and returns the response.
+        func send(request: Request) -> Response? {
             storage.withLock { storage in
-                storage.send(request: request, expecting: Response.self)
+                storage.send(request: request)
             }
         }
     }

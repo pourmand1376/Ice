@@ -218,7 +218,15 @@ private struct MenuBarSearchContentView: View {
 
             Divider()
 
-            if #available(macOS 26.0, *) {
+            if itemManager.itemCache.managedItems.isEmpty {
+                VStack {
+                    Text("Loading menu bar items…")
+                        .font(.title2)
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if #available(macOS 26.0, *) {
                 GlassEffectContainer(spacing: 0) {
                     SectionedList(selection: $model.selection, items: $model.displayedItems)
                         .contentPadding(8)
