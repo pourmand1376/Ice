@@ -430,13 +430,39 @@ extension MenuBarManager: BindingExposable { }
 
 // MARK: - MenuBarAverageColorInfo
 
-/// Information for the menu bar's average color.
+/// Information for the average color of the menu bar.
 struct MenuBarAverageColorInfo: Hashable {
+    /// Sources used to compute the average color of the menu bar.
     enum Source: Hashable {
         case menuBarWindow
         case desktopWallpaper
     }
 
+    /// The average color of the menu bar
     var color: CGColor
+
+    /// The source used to compute the color.
     var source: Source
+
+    /// The brightness of the menu bar's color.
+    var brightness: CGFloat { color.brightness ?? 0 }
+
+    /// A Boolean value that indicates whether the menu bar has a
+    /// bright color.
+    ///
+    /// This value is `true` if ``brightness`` is above `0.67`. At
+    /// the time of writing, if this value is `true`, the menu bar
+    /// draws its items with a darker appearance.
+    var isBright: Bool { brightness > 0.67 }
+
+    /// A SwiftUI representation of the color info.
+    @ViewBuilder
+    var swiftUIView: some View {
+        let opacity: CGFloat = switch source {
+        case .menuBarWindow: 0.2
+        case .desktopWallpaper: 0.5
+        }
+        Color(cgColor: color)
+            .overlay(.bar.opacity(opacity).blendMode(.softLight))
+    }
 }

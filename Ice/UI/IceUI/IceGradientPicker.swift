@@ -1,12 +1,14 @@
 //
-//  CustomGradientPicker.swift
+//  IceGradientPicker.swift
 //  Ice
 //
 
 import Combine
 import SwiftUI
 
-struct CustomGradientPicker: View {
+struct IceGradientPicker: View {
+    typealias Mode = NSColorPanel.Mode
+
     @Binding var gradient: CustomGradient
     @State private var selectedStop: ColorStop?
     @State private var zOrderedStops: [ColorStop]
@@ -15,7 +17,7 @@ struct CustomGradientPicker: View {
 
     let supportsOpacity: Bool
     let allowsEmptySelections: Bool
-    let mode: NSColorPanel.Mode
+    let mode: Mode?
 
     /// Creates a new gradient picker.
     ///
@@ -29,9 +31,9 @@ struct CustomGradientPicker: View {
     ///     picking a color for the gradient.
     init(
         gradient: Binding<CustomGradient>,
-        supportsOpacity: Bool,
-        allowsEmptySelections: Bool,
-        mode: NSColorPanel.Mode
+        mode: Mode? = nil,
+        allowsEmptySelections: Bool = false,
+        supportsOpacity: Bool
     ) {
         self._gradient = gradient
         self.zOrderedStops = gradient.wrappedValue.stops
@@ -75,7 +77,7 @@ struct CustomGradientPicker: View {
                 .fill(.white.gradient.opacity(0.1))
                 .blendMode(.softLight)
         } else {
-            gradient
+            gradient.swiftUIView
         }
     }
 
@@ -211,7 +213,7 @@ private struct CustomGradientPickerHandle: View {
 
     let index: Int
     let supportsOpacity: Bool
-    let mode: NSColorPanel.Mode
+    let mode: NSColorPanel.Mode?
     let geometry: GeometryProxy
     let width: CGFloat = 8
     let height: CGFloat = 22
@@ -235,12 +237,14 @@ private struct CustomGradientPickerHandle: View {
         }
     }
 
+    private var borderShape: some InsettableShape {
+        Capsule(style: .circular)
+    }
+
     var body: some View {
         if let stop {
             handleView(cgColor: stop.color)
-                .overlay {
-                    borderView
-                }
+                .contentShape([.interaction, .focusEffect], borderShape)
                 .frame(width: width, height: height)
                 .overlay {
                     selectionIndicator(isSelected: selectedStop == stop)
@@ -253,16 +257,10 @@ private struct CustomGradientPickerHandle: View {
                 .gesture(
                     DragGesture(minimumDistance: 5)
                         .onChanged { value in
-                            update(
-                                with: value.location.x,
-                                shouldSnap: abs(value.velocity.width) <= 75
-                            )
+                            update(with: value.location.x, shouldSnap: abs(value.velocity.width) <= 75)
                         }
                         .onEnded { value in
-                            update(
-                                with: value.location.x,
-                                shouldSnap: true
-                            )
+                            update(with: value.location.x, shouldSnap: true)
                         }
                 )
                 .onTapGesture(count: 2) {
@@ -270,12 +268,11 @@ private struct CustomGradientPickerHandle: View {
                         gradient.stops[0].location = 0.5
                     } else {
                         let last = CGFloat(gradient.stops.count - 1)
-                        gradient.stops = gradient.sortedStops
+                        gradient.stops = gradient.stops.lazy
+                            .sorted { $0.location < $1.location }
                             .enumerated()
                             .map { n, stop in
-                                var stop = stop
-                                stop.location = CGFloat(n) / last
-                                return stop
+                                ColorStop(color: stop.color, location: CGFloat(n) / last)
                             }
                     }
                 }
@@ -297,29 +294,24 @@ private struct CustomGradientPickerHandle: View {
                 .onKeyDown(key: .delete) {
                     deleteSelectedStop()
                 }
+                .onKeyPress(.space) {
+                    selectedStop = stop
+                    return .handled
+                }
         }
     }
 
     @ViewBuilder
     private func handleView(cgColor: CGColor) -> some View {
-        Capsule()
-            .inset(by: -1)
+        borderShape
             .fill(Color(cgColor: cgColor))
-    }
-
-    @ViewBuilder
-    private var borderView: some View {
-        Capsule()
-            .inset(by: -1)
-            .stroke()
-            .foregroundStyle(.secondary.opacity(0.75))
-            .blendMode(.softLight)
+            .strokeBorder(.secondary.opacity(0.75))
     }
 
     @ViewBuilder
     private func selectionIndicator(isSelected: Bool) -> some View {
         if isSelected {
-            Capsule()
+            borderShape
                 .inset(by: -1.5)
                 .stroke(.primary, lineWidth: 1.5)
         }
@@ -357,7 +349,9 @@ private struct CustomGradientPickerHandle: View {
         deactivate()
 
         NSColorPanel.shared.showsAlpha = supportsOpacity
-        NSColorPanel.shared.mode = mode
+        if let mode {
+            NSColorPanel.shared.mode = mode
+        }
         if let color = stop.flatMap({ NSColor(cgColor: $0.color) }) {
             NSColorPanel.shared.color = color
         }
@@ -410,37 +404,11 @@ private struct CustomGradientPickerHandle: View {
     private func deleteSelectedStop() {
         deactivate()
         guard
-            let selectedStop,
-            let index = gradient.stops.firstIndex(of: selectedStop)
+            let stop = selectedStop.take(),
+            let index = gradient.stops.firstIndex(of: stop)
         else {
             return
         }
         gradient.stops.remove(at: index)
-        self.selectedStop = nil
     }
 }
-
-#if DEBUG
-private struct CustomGradientPickerPreview: View {
-    @State private var gradient = CustomGradient(unsortedStops: [
-        ColorStop(color: NSColor.systemRed.cgColor, location: 0),
-        ColorStop(color: NSColor.systemBlue.cgColor, location: 1 / 3),
-        ColorStop(color: NSColor.systemIndigo.cgColor, location: 2 / 3),
-        ColorStop(color: NSColor.systemPurple.cgColor, location: 1),
-    ])
-
-    var body: some View {
-        CustomGradientPicker(
-            gradient: $gradient,
-            supportsOpacity: false,
-            allowsEmptySelections: false,
-            mode: .crayon
-        )
-    }
-}
-
-#Preview {
-    CustomGradientPickerPreview()
-        .padding()
-}
-#endif

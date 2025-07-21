@@ -3,8 +3,7 @@
 //  Ice
 //
 
-import CoreGraphics
-import Foundation
+import SwiftUI
 
 struct MenuBarAppearanceConfigurationV2: Hashable {
     var lightModeConfiguration: MenuBarAppearancePartialConfiguration
@@ -18,7 +17,7 @@ struct MenuBarAppearanceConfigurationV2: Hashable {
 
     var hasRoundedShape: Bool {
         switch shapeKind {
-        case .none: false
+        case .noShape: false
         case .full: fullShapeInfo.hasRoundedShape
         case .split: splitShapeInfo.hasRoundedShape
         }
@@ -42,7 +41,7 @@ extension MenuBarAppearanceConfigurationV2 {
         lightModeConfiguration: .defaultConfiguration,
         darkModeConfiguration: .defaultConfiguration,
         staticConfiguration: .defaultConfiguration,
-        shapeKind: .none,
+        shapeKind: .noShape,
         fullShapeInfo: .default,
         splitShapeInfo: .default,
         isInset: true,
@@ -99,6 +98,12 @@ struct MenuBarAppearancePartialConfiguration: Hashable {
     var tintKind: MenuBarTintKind
     var tintColor: CGColor
     var tintGradient: CustomGradient
+
+    var tintView: some View {
+        tintKind.swiftUIView(with: self)
+            .opacity(0.2)
+            .allowsHitTesting(false)
+    }
 }
 
 // MARK: Default Partial Configuration
@@ -108,7 +113,7 @@ extension MenuBarAppearancePartialConfiguration {
         hasBorder: false,
         borderColor: .black,
         borderWidth: 1,
-        tintKind: .none,
+        tintKind: .noTint,
         tintColor: .black,
         tintGradient: .defaultMenuBarTint
     )

@@ -616,7 +616,7 @@ private final class MenuBarOverlayPanelContentView: NSView {
     /// Draws the tint defined by the given configuration in the given rectangle.
     private func drawTint(in rect: CGRect) {
         switch configuration.tintKind {
-        case .none:
+        case .noTint:
             break
         case .solid:
             if let tintColor = NSColor(cgColor: configuration.tintColor)?.withAlphaComponent(0.2) {
@@ -641,7 +641,7 @@ private final class MenuBarOverlayPanelContentView: NSView {
         let drawableBounds = getDrawableBounds()
 
         let shapePath = switch fullConfiguration.shapeKind {
-        case .none:
+        case .noShape:
             NSBezierPath(rect: drawableBounds)
         case .full:
             pathForFullShape(
@@ -662,7 +662,7 @@ private final class MenuBarOverlayPanelContentView: NSView {
         var hasBorder = false
 
         switch fullConfiguration.shapeKind {
-        case .none:
+        case .noShape:
             if configuration.hasShadow {
                 let gradient = NSGradient(
                     colors: [
@@ -743,7 +743,7 @@ private final class MenuBarOverlayPanelContentView: NSView {
                 }
 
                 let borderPath = switch fullConfiguration.shapeKind {
-                case .none:
+                case .noShape:
                     NSBezierPath(rect: drawableBounds)
                 case .full:
                     pathForFullShape(

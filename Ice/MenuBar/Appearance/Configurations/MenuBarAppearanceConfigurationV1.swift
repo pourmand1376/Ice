@@ -22,7 +22,7 @@ struct MenuBarAppearanceConfigurationV1: Hashable {
 
     var hasRoundedShape: Bool {
         switch shapeKind {
-        case .none: false
+        case .noShape: false
         case .full: fullShapeInfo.hasRoundedShape
         case .split: splitShapeInfo.hasRoundedShape
         }
@@ -101,10 +101,10 @@ extension MenuBarAppearanceConfigurationV1 {
         isInset: true,
         borderColor: .black,
         borderWidth: 1,
-        shapeKind: .none,
+        shapeKind: .noShape,
         fullShapeInfo: .default,
         splitShapeInfo: .default,
-        tintKind: .none,
+        tintKind: .noTint,
         tintColor: .black,
         tintGradient: .defaultMenuBarTint
     )

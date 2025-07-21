@@ -294,7 +294,7 @@ private struct IceBarContentView: View {
         guard let menuBarHeight = screen.getMenuBarHeight() else {
             return nil
         }
-        if configuration.shapeKind != .none && configuration.isInset && screen.hasNotch {
+        if configuration.shapeKind != .noShape && configuration.isInset && screen.hasNotch {
             return menuBarHeight - appState.appearanceManager.menuBarInsetAmount * 2
         }
         return menuBarHeight
@@ -320,7 +320,7 @@ private struct IceBarContentView: View {
                 .frame(height: contentHeight)
                 .padding(.horizontal, horizontalPadding)
                 .padding(.vertical, verticalPadding)
-                .layoutBarStyle(appState: appState, averageColorInfo: colorManager.colorInfo)
+                .menuBarItemContainer(appState: appState, colorInfo: colorManager.colorInfo)
                 .foregroundStyle(colorManager.colorInfo?.color.brightness ?? 0 > 0.67 ? .black : .white)
                 .clipShape(clipShape)
                 .shadow(color: .black.opacity(shadowOpacity), radius: 2.5)

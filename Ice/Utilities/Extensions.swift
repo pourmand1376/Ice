@@ -341,6 +341,13 @@ extension Comparable {
     }
 }
 
+// MARK: - DistributedNotificationCenter
+
+extension DistributedNotificationCenter {
+    /// A notification posted whenever the system-wide interface theme changes.
+    static let interfaceThemeChangedNotification = Notification.Name("AppleInterfaceThemeChangedNotification")
+}
+
 // MARK: - EdgeInsets
 
 extension EdgeInsets {

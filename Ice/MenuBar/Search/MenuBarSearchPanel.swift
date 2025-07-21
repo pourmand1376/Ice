@@ -577,7 +577,7 @@ private struct MenuBarSearchItemView: View {
     @ViewBuilder
     private var imageViewWithBackground: some View {
         imageView
-            .layoutBarStyle(appState: appState, averageColorInfo: model.averageColorInfo)
+            .menuBarItemContainer(appState: appState, colorInfo: model.averageColorInfo)
             .clipShape(backgroundShape)
             .overlay {
                 backgroundShape

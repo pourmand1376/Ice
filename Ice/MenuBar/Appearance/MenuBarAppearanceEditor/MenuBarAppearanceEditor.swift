@@ -72,10 +72,10 @@ struct MenuBarAppearanceEditor: View {
                 isDynamicToggle
             }
             if appearanceManager.configuration.isDynamic {
-                LabeledPartialEditor(appearance: .light)
-                LabeledPartialEditor(appearance: .dark)
+                LabeledPartialEditor(configuration: $appearanceManager.configuration, appearance: .light)
+                LabeledPartialEditor(configuration: $appearanceManager.configuration, appearance: .dark)
             } else {
-                StaticPartialEditor()
+                StaticPartialEditor(configuration: $appearanceManager.configuration)
             }
             IceSection("Menu Bar Shape") {
                 shapePicker
@@ -96,7 +96,7 @@ struct MenuBarAppearanceEditor: View {
 
     @ViewBuilder
     private var isDynamicToggle: some View {
-        Toggle("Use dynamic appearance", isOn: appearanceManager.bindings.configuration.isDynamic)
+        Toggle("Use dynamic appearance", isOn: $appearanceManager.configuration.isDynamic)
             .annotation("Apply different settings based on the current system appearance.")
     }
 
@@ -109,16 +109,16 @@ struct MenuBarAppearanceEditor: View {
 
     @ViewBuilder
     private var shapePicker: some View {
-        MenuBarShapePicker()
+        MenuBarShapePicker(configuration: $appearanceManager.configuration)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
     private var isInset: some View {
-        if appearanceManager.configuration.shapeKind != .none {
+        if appearanceManager.configuration.shapeKind != .noShape {
             Toggle(
                 "Use inset shape on screens with notch",
-                isOn: appearanceManager.bindings.configuration.isInset
+                isOn: $appearanceManager.configuration.isInset
             )
         }
     }
@@ -151,20 +151,18 @@ private struct UnlabeledPartialEditor: View {
                 .labelsHidden()
 
                 switch configuration.tintKind {
-                case .none:
+                case .noTint:
                     EmptyView()
                 case .solid:
-                    CustomColorPicker(
+                    IceColorPicker(
                         selection: $configuration.tintColor,
-                        supportsOpacity: false,
-                        mode: .crayon
+                        style: .minimal,
+                        supportsOpacity: false
                     )
                 case .gradient:
-                    CustomGradientPicker(
+                    IceGradientPicker(
                         gradient: $configuration.tintGradient,
-                        supportsOpacity: false,
-                        allowsEmptySelections: false,
-                        mode: .crayon
+                        supportsOpacity: false
                     )
                 }
             }
@@ -186,10 +184,10 @@ private struct UnlabeledPartialEditor: View {
     private var borderColor: some View {
         if configuration.hasBorder {
             IceLabeledContent("Border Color") {
-                CustomColorPicker(
+                IceColorPicker(
                     selection: $configuration.borderColor,
-                    supportsOpacity: true,
-                    mode: .crayon
+                    style: .minimal,
+                    supportsOpacity: true
                 )
             }
         }
@@ -211,7 +209,7 @@ private struct UnlabeledPartialEditor: View {
 }
 
 private struct LabeledPartialEditor: View {
-    @EnvironmentObject var appearanceManager: MenuBarAppearanceManager
+    @Binding var configuration: MenuBarAppearanceConfigurationV2
     @State private var currentAppearance = SystemAppearance.current
     @State private var textFrame = CGRect.zero
 
@@ -246,9 +244,9 @@ private struct LabeledPartialEditor: View {
     private var previewButton: some View {
         switch appearance {
         case .light:
-            PreviewButton(configuration: appearanceManager.configuration.lightModeConfiguration)
+            PreviewButton(configuration: configuration.lightModeConfiguration)
         case .dark:
-            PreviewButton(configuration: appearanceManager.configuration.darkModeConfiguration)
+            PreviewButton(configuration: configuration.darkModeConfiguration)
         }
     }
 
@@ -256,18 +254,18 @@ private struct LabeledPartialEditor: View {
     private var partialEditor: some View {
         switch appearance {
         case .light:
-            UnlabeledPartialEditor(configuration: appearanceManager.bindings.configuration.lightModeConfiguration)
+            UnlabeledPartialEditor(configuration: $configuration.lightModeConfiguration)
         case .dark:
-            UnlabeledPartialEditor(configuration: appearanceManager.bindings.configuration.darkModeConfiguration)
+            UnlabeledPartialEditor(configuration: $configuration.darkModeConfiguration)
         }
     }
 }
 
 private struct StaticPartialEditor: View {
-    @EnvironmentObject var appearanceManager: MenuBarAppearanceManager
+    @Binding var configuration: MenuBarAppearanceConfigurationV2
 
     var body: some View {
-        UnlabeledPartialEditor(configuration: appearanceManager.bindings.configuration.staticConfiguration)
+        UnlabeledPartialEditor(configuration: $configuration.staticConfiguration)
     }
 }
 
