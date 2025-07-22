@@ -7,17 +7,14 @@ import Combine
 import SwiftUI
 
 struct IceColorPicker: View {
-    typealias Style = NSColorWell.Style
-    typealias Mode = NSColorPanel.Mode
-
     private final class Coordinator {
         @Binding var selection: CGColor
 
-        let mode: Mode?
+        let mode: NSColorPanel.Mode?
         let supportsOpacity: Bool
         private var cancellables = Set<AnyCancellable>()
 
-        init(selection: Binding<CGColor>, mode: Mode?, supportsOpacity: Bool) {
+        init(selection: Binding<CGColor>, mode: NSColorPanel.Mode?, supportsOpacity: Bool) {
             self._selection = selection
             self.mode = mode
             self.supportsOpacity = supportsOpacity
@@ -93,8 +90,8 @@ struct IceColorPicker: View {
     private struct Representable: NSViewRepresentable {
         @Binding var selection: CGColor
 
-        let style: Style
-        let mode: Mode?
+        let style: NSColorWell.Style
+        let mode: NSColorPanel.Mode?
         let supportsOpacity: Bool
 
         func makeNSView(context: Context) -> NSColorWell {
@@ -136,21 +133,85 @@ struct IceColorPicker: View {
 
     @Environment(\.isEnabled) private var isEnabled
     @Binding var selection: CGColor
+    @State private var isHovering = false
 
-    let style: Style
-    let mode: Mode?
+    let style: NSColorWell.Style
+    let mode: NSColorPanel.Mode?
     let supportsOpacity: Bool
 
-    init(selection: Binding<CGColor>, style: Style = .minimal, mode: Mode? = nil, supportsOpacity: Bool = true) {
+    init(
+        selection: Binding<CGColor>,
+        style: NSColorWell.Style = .minimal,
+        mode: NSColorPanel.Mode? = nil,
+        supportsOpacity: Bool = true
+    ) {
         self._selection = selection
         self.style = style
         self.mode = mode
         self.supportsOpacity = supportsOpacity
     }
 
+    private var borderShape: some InsettableShape {
+        if #available(macOS 26.0, *) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+        } else {
+            RoundedRectangle(cornerRadius: 5, style: .circular)
+        }
+    }
+
     var body: some View {
         Representable(selection: $selection, style: style, mode: mode, supportsOpacity: supportsOpacity)
             .allowsHitTesting(isEnabled)
+            .blendMode(.destinationOver)
+            .contentShape(.interaction, borderShape)
+            .overlay {
+                swatchView
+            }
+            .contentShape([.interaction, .focusEffect], borderShape)
+            .onHover { hovering in
+                isHovering = hovering
+            }
             .opacity(isEnabled ? 1 : 0.5)
+            .accessibilityElement(children: .combine)
+            .accessibilityRepresentation {
+                ColorPicker(selection: $selection, supportsOpacity: supportsOpacity) { }
+                    .labelsHidden()
+            }
+    }
+
+    @ViewBuilder
+    private var swatchView: some View {
+        GeometryReader { geometry in
+            Image(nsImage: NSImage(size: geometry.size, flipped: false) { bounds in
+                guard let color = NSColor(cgColor: selection) else {
+                    return false
+                }
+                color.drawSwatch(in: bounds)
+                return true
+            })
+        }
+        .clipShape(borderShape)
+        .overlay {
+            pullDownIndicator
+            borderShape.strokeBorder(.tertiary)
+        }
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private var pullDownIndicator: some View {
+        if isHovering {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down.circle.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .fontWeight(.medium)
+                    .symbolRenderingMode(.multicolor)
+                    .foregroundStyle(.black.opacity(0.33))
+                    .frame(width: 12)
+            }
+            .padding(.trailing, 4)
+        }
     }
 }
