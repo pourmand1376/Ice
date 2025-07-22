@@ -97,7 +97,7 @@ struct MenuBarAppearancePartialConfiguration: Hashable {
     var borderWidth: Double
     var tintKind: MenuBarTintKind
     var tintColor: CGColor
-    var tintGradient: CustomGradient
+    var tintGradient: IceGradient
 
     var tintView: some View {
         tintKind.swiftUIView(with: self)
@@ -139,11 +139,11 @@ extension MenuBarAppearancePartialConfiguration: Codable {
         try self.init(
             hasShadow: container.decodeIfPresent(Bool.self, forKey: .hasShadow) ?? Self.defaultConfiguration.hasShadow,
             hasBorder: container.decodeIfPresent(Bool.self, forKey: .hasBorder) ?? Self.defaultConfiguration.hasBorder,
-            borderColor: container.decodeIfPresent(CodableColor.self, forKey: .borderColor)?.cgColor ?? Self.defaultConfiguration.borderColor,
+            borderColor: container.decodeIfPresent(IceColor.self, forKey: .borderColor)?.cgColor ?? Self.defaultConfiguration.borderColor,
             borderWidth: container.decodeIfPresent(Double.self, forKey: .borderWidth) ?? Self.defaultConfiguration.borderWidth,
             tintKind: container.decodeIfPresent(MenuBarTintKind.self, forKey: .tintKind) ?? Self.defaultConfiguration.tintKind,
-            tintColor: container.decodeIfPresent(CodableColor.self, forKey: .tintColor)?.cgColor ?? Self.defaultConfiguration.tintColor,
-            tintGradient: container.decodeIfPresent(CustomGradient.self, forKey: .tintGradient) ?? Self.defaultConfiguration.tintGradient
+            tintColor: container.decodeIfPresent(IceColor.self, forKey: .tintColor)?.cgColor ?? Self.defaultConfiguration.tintColor,
+            tintGradient: container.decodeIfPresent(IceGradient.self, forKey: .tintGradient) ?? Self.defaultConfiguration.tintGradient
         )
     }
 
@@ -151,10 +151,10 @@ extension MenuBarAppearancePartialConfiguration: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(hasShadow, forKey: .hasShadow)
         try container.encode(hasBorder, forKey: .hasBorder)
-        try container.encode(CodableColor(cgColor: borderColor), forKey: .borderColor)
+        try container.encode(IceColor(cgColor: borderColor), forKey: .borderColor)
         try container.encode(borderWidth, forKey: .borderWidth)
         try container.encode(tintKind, forKey: .tintKind)
-        try container.encode(CodableColor(cgColor: tintColor), forKey: .tintColor)
+        try container.encode(IceColor(cgColor: tintColor), forKey: .tintColor)
         try container.encode(tintGradient, forKey: .tintGradient)
     }
 }

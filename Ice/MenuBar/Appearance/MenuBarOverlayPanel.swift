@@ -624,7 +624,7 @@ private final class MenuBarOverlayPanelContentView: NSView {
                 rect.fill()
             }
         case .gradient:
-            if let tintGradient = configuration.tintGradient.withAlphaComponent(0.2).nsGradient {
+            if let tintGradient = configuration.tintGradient.withAlpha(0.2).nsGradient {
                 tintGradient.draw(in: rect, angle: 0)
             }
         }
